@@ -1,0 +1,18 @@
+name = "vedhin-digital"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vedhin-db"
+database_id = "adb99799-3d5a-446c-8f35-4d2323775844"
+migrations_dir = "migrations"
+
+# R2 (photos) is enabled later (M4). Uncomment after enabling R2 in the dashboard:
+# [[r2_buckets]]
+# binding = "MEDIA"
+# bucket_name = "vedhin-media"
+
+[vars]
+APP_ENV = "production"
+AI_PROVIDER = "stub"

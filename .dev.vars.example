@@ -1,0 +1,8 @@
+# Copy to .dev.vars (never commit). In production use: wrangler secret put NAME
+GEMINI_API_KEY=
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+WHATSAPP_TOKEN=
+WHATSAPP_VERIFY_TOKEN=
+RESEND_API_KEY=
+ADMIN_PASSWORD_HASH=
