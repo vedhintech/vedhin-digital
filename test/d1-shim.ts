@@ -17,8 +17,8 @@ class Stmt {
     return { results: this.db.prepare(this.sql).all(...this.params) };
   }
   async run() {
-    this.db.prepare(this.sql).run(...this.params);
-    return { success: true };
+    const r = this.db.prepare(this.sql).run(...this.params);
+    return { success: true, meta: { changes: r.changes } };
   }
 }
 

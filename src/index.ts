@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { AppBindings } from "./types";
-import { storefront } from "./routes/storefront";
+import { storefront, media } from "./routes/storefront";
+import { securityHeaders } from "./middleware/security";
 import { t } from "./i18n/hinglish";
 
 const app = new Hono<AppBindings>();
@@ -12,7 +13,9 @@ app.get("/health", async (c) => {
 
 app.get("/", (c) => c.json({ name: "Vedhin Digital", message: "Platform chal raha hai." }));
 
+app.use("*", securityHeaders);
 app.route("/", storefront);
+app.route("/", media);
 
 app.notFound((c) => c.json({ error: t.shopNotFound }, 404));
 app.onError((err, c) => {
