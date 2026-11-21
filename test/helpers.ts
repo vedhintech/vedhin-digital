@@ -1,5 +1,5 @@
 import { makeDb } from "./d1-shim";
-import app from "../src/index";
+import { app } from "../src/index";
 import type { Env } from "../src/types";
 import { resetRateLimits } from "../src/lib/rate";
 

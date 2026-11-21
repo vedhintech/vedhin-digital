@@ -2,6 +2,9 @@ import { Hono } from "hono";
 import type { AppBindings } from "./types";
 import { storefront, media } from "./routes/storefront";
 import { seller } from "./routes/seller";
+import { admin } from "./routes/admin";
+import { runScheduled } from "./cron";
+import type { Env } from "./types";
 import { securityHeaders } from "./middleware/security";
 import { t } from "./i18n/hinglish";
 
@@ -18,6 +21,7 @@ app.use("*", securityHeaders);
 app.route("/", storefront);
 app.route("/", media);
 app.route("/", seller);
+app.route("/", admin);
 
 app.notFound((c) => c.json({ error: t.shopNotFound }, 404));
 app.onError((err, c) => {
@@ -25,4 +29,10 @@ app.onError((err, c) => {
   return c.json({ error: t.somethingWrong }, 500);
 });
 
-export default app;
+export default {
+  fetch: app.fetch,
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(runScheduled(env));
+  },
+};
+export { app };

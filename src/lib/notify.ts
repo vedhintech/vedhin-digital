@@ -54,3 +54,26 @@ export async function whatsappText(env: Env, to: string, body: string): Promise<
     return false;
   }
 }
+
+/** Business-initiated WhatsApp message must use an approved template. Stub when not configured. */
+export async function whatsappTemplate(env: Env, to: string, template: string, params: string[]): Promise<boolean> {
+  if (!env.WHATSAPP_TOKEN || !env.WHATSAPP_PHONE_ID) {
+    console.log("[whatsapp:template:stub] ->", to.slice(-4), template);
+    return false;
+  }
+  try {
+    const r = await fetch(`https://graph.facebook.com/v21.0/${env.WHATSAPP_PHONE_ID}/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${env.WHATSAPP_TOKEN}` },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to,
+        type: "template",
+        template: { name: template, language: { code: "hi" }, components: [{ type: "body", parameters: params.map((text) => ({ type: "text", text })) }] },
+      }),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}

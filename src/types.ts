@@ -12,6 +12,7 @@ export interface Env {
   WHATSAPP_PHONE_ID?: string;
   WHATSAPP_VERIFY_TOKEN?: string;
   WHATSAPP_APP_SECRET?: string;
+  WHATSAPP_TEMPLATE_OPENING?: string;
   RESEND_API_KEY?: string;
   MAIL_FROM?: string;
 }

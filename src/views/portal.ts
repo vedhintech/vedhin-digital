@@ -3,7 +3,7 @@ import type { Shop } from "../types";
 import { ATTR_FIELDS, CATEGORY_DEFAULTS } from "../lib/seller";
 import { PALETTES, parseTheme, ALL_SECTIONS } from "../lib/theme";
 
-const CSS = `
+export const CSS = `
 :root{--bg:#F7F6F4;--s:#fff;--t:#1d1b20;--m:#6b6772;--p:#3B2A8C;--ac:#E8A33D;--b:#e5e2e8;--ok:#1b6b3a;--er:#b3261e}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:400 16px/1.55 'Hind',system-ui,sans-serif;padding-bottom:84px}
 h1{font-size:26px;margin:0 0 4px}h2{font-size:19px;margin:22px 0 8px}a{color:var(--p)}

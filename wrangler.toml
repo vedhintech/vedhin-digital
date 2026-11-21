@@ -13,6 +13,9 @@ migrations_dir = "migrations"
 # binding = "MEDIA"
 # bucket_name = "vedhin-media"
 
+[triggers]
+crons = ["0 * * * *"]
+
 [vars]
 APP_ENV = "production"
 AI_PROVIDER = "stub"

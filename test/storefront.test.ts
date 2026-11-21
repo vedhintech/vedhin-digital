@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import app from "../src/index";
+import { app } from "../src/index";
 import { makeDb } from "./d1-shim";
 import type { Env } from "../src/types";
 
