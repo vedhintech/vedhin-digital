@@ -8,6 +8,7 @@ export interface Env {
   GEMINI_API_KEY?: string;
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_CHAT_ID?: string;
+  TELEGRAM_WEBHOOK_SECRET?: string;
   WHATSAPP_TOKEN?: string;
   WHATSAPP_PHONE_ID?: string;
   WHATSAPP_VERIFY_TOKEN?: string;

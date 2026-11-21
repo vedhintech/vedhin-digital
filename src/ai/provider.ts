@@ -1,5 +1,6 @@
 // ONE interface for all AI. Switching provider = config change (AI_PROVIDER), not code change.
 import type { Env } from "../types";
+import { GeminiProvider } from "./gemini";
 
 export interface ProductDraft {
   name: string;
@@ -35,7 +36,9 @@ export function getAiProvider(env: Env): AiProvider {
   switch (env.AI_PROVIDER) {
     case "stub":
       return new StubAiProvider();
-    // "gemini" and "claude" providers are added in M6 behind this same interface.
+    case "gemini":
+      return env.GEMINI_API_KEY ? new GeminiProvider(env.GEMINI_API_KEY) : new StubAiProvider();
+    // A "claude" provider (Haiku) plugs in here later with no other code change.
     default:
       return new StubAiProvider();
   }
