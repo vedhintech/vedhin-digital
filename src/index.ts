@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { AppBindings } from "./types";
 import { storefront, media } from "./routes/storefront";
+import { seller } from "./routes/seller";
 import { securityHeaders } from "./middleware/security";
 import { t } from "./i18n/hinglish";
 
@@ -16,6 +17,7 @@ app.get("/", (c) => c.json({ name: "Vedhin Digital", message: "Platform chal rah
 app.use("*", securityHeaders);
 app.route("/", storefront);
 app.route("/", media);
+app.route("/", seller);
 
 app.notFound((c) => c.json({ error: t.shopNotFound }, 404));
 app.onError((err, c) => {
