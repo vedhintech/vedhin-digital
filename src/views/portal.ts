@@ -36,7 +36,7 @@ export function portal(shop: Shop, active: Tab, title: string, body: Raw | strin
 <link rel="manifest" href="/seller/manifest.webmanifest"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind:wght@400;500;600&display=swap"><style>${CSS}</style></head><body>
 <div class="top"><b>${esc(shop.name)}</b><form method="post" action="/seller/logout"><button class="btn s" style="min-height:40px">Logout</button></form></div>
 <div class="w">${flash?.m ? `<div class="msg" role="status">${esc(flash.m)}</div>` : ""}${flash?.e ? `<div class="msg e" role="alert">${esc(flash.e)}</div>` : ""}${body}</div>
-<nav class="tabs" aria-label="Menu">${tab("home", "/seller", "Home")}${tab("orders", "/seller/orders", "Orders")}${tab("products", "/seller/products", "Products")}${tab("shop", "/seller/shop", "Meri dukaan")}${tab("help", "/seller/help", "Help")}</nav></body></html>`;
+<nav class="tabs" aria-label="Menu">${tab("home", "/seller", "Home")}${tab("orders", "/seller/orders", "Orders")}${tab("products", "/seller/products", "Products")}${tab("shop", "/seller/shop", "Dukaan")}${tab("help", "/seller/help", "Help")}</nav></body></html>`;
 }
 
 export function loginPage(error?: string): string {

@@ -144,19 +144,27 @@ export function logoSvg(logo: Theme["logo"], color: string, accent: string, heig
   return `<svg role="img" aria-label="${text}" height="${height}" viewBox="0 0 ${w} 48" xmlns="http://www.w3.org/2000/svg"><g transform="translate(${w / 2 - 16} 0) scale(.8)" fill="none" stroke="${accent}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${icon}"/></g><text x="${w / 2}" y="42" text-anchor="middle" font-family="inherit" font-size="17" font-weight="700" fill="${color}">${text}</text></svg>`;
 }
 
-/** Deterministic placeholder art for demo products (stands in for stock photos until seller uploads). */
+/** Deterministic placeholder art for demo products, drawn in the shop's own palette (stands in for stock photos). */
 export function placeholderSvg(seed: string, label: string, p: Palette): string {
   const h = hashStr(seed);
-  const hue = h % 360;
-  const bg = `hsl(${hue} 55% 88%)`;
-  const fg = `hsl(${hue} 45% 38%)`;
+  const tint = (hex: string, a: number) => {
+    const n = parseInt(hex.slice(1), 16);
+    const mix = (c: number) => Math.round(c * a + 255 * (1 - a));
+    return `rgb(${mix((n >> 16) & 255)},${mix((n >> 8) & 255)},${mix(n & 255)})`;
+  };
+  const bg = tint(h % 2 ? p.primary : p.accent, 0.16);
   const dots: string[] = [];
-  for (let i = 0; i < 28; i++) {
-    const x = (hashStr(seed + "x" + i) % 100) * 4;
-    const y = (hashStr(seed + "y" + i) % 100) * 5;
-    const r = 3 + (hashStr(seed + "r" + i) % 6);
-    dots.push(`<circle cx="${x}" cy="${y}" r="${r}" fill="${fg}" opacity=".16"/>`);
+  const cols = 8, rows = 10;
+  const phase = h % 3;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = 25 + c * 50 + (r % 2 ? 25 : 0) * (phase === 0 ? 1 : 0);
+      const y = 25 + r * 50;
+      const big = (c + r + phase) % 3 === 0;
+      dots.push(`<circle cx="${x}" cy="${y}" r="${big ? 7 : 3.5}" fill="${big ? p.primary : p.accent}" opacity="${big ? 0.22 : 0.3}"/>`);
+    }
   }
+  const stripe = 200 + (h % 120);
   const safe = label.replace(/[<>&"']/g, "").slice(0, 28);
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" preserveAspectRatio="xMidYMid slice"><rect width="400" height="500" fill="${bg}"/>${dots.join("")}<g transform="rotate(-12 200 250)" opacity=".55"><rect x="-40" y="228" width="480" height="10" fill="${p.accent}"/><rect x="-40" y="252" width="480" height="4" fill="${fg}"/></g><text x="200" y="440" text-anchor="middle" font-family="sans-serif" font-size="20" fill="${fg}">${safe}</text></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" preserveAspectRatio="xMidYMid slice"><rect width="400" height="500" fill="${bg}"/>${dots.join("")}<g transform="rotate(-14 200 250)"><rect x="-60" y="${stripe}" width="520" height="22" fill="${p.primary}" opacity=".85"/><rect x="-60" y="${stripe + 28}" width="520" height="8" fill="${p.accent}"/></g><rect x="0" y="448" width="400" height="52" fill="${p.surface}" opacity=".88"/><text x="200" y="480" text-anchor="middle" font-family="sans-serif" font-size="19" fill="${p.text}">${safe}</text></svg>`;
 }

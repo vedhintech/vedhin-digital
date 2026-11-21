@@ -253,7 +253,7 @@ export const media = new Hono<AppBindings>();
 media.get("/ph/:file", (c) => {
   const seed = c.req.param("file").replace(/\.svg$/, "").slice(0, 60);
   const label = (c.req.query("l") ?? "").slice(0, 28);
-  const pal = PALETTES[defaultTheme("x", null).palette]!;
+  const pal = PALETTES[c.req.query("p") ?? ""] ?? PALETTES[defaultTheme("x", null).palette]!;
   return c.body(placeholderSvg(seed, label, pal), 200, { "content-type": "image/svg+xml", "cache-control": "public, max-age=31536000, immutable" });
 });
 media.get("/media/*", async (c) => {

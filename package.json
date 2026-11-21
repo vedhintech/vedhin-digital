@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:migrate:remote": "wrangler d1 migrations apply vedhin-db --remote",
-    "db:migrate:local": "wrangler d1 migrations apply vedhin-db --local"
+    "db:migrate:local": "wrangler d1 migrations apply vedhin-db --local",
+    "preview": "tsx scripts/preview-server.ts"
   },
   "dependencies": {
     "hono": "^4.6.0",
@@ -20,6 +21,7 @@
     "@types/better-sqlite3": "latest",
     "@types/node": "^26.6.6",
     "better-sqlite3": "latest",
+    "tsx": "^4.23.15",
     "typescript": "latest",
     "vitest": "latest",
     "wrangler": "latest"

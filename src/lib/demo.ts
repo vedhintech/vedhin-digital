@@ -66,7 +66,7 @@ export async function buildDemoShop(env: Env, lead: LeadRow): Promise<{ shopId: 
     await env.DB.prepare("INSERT INTO products (id, shop_id, name, description, category, price, mrp, stock, active, attributes_json, created_at, source) VALUES (?,?,?,?,?,?,?,?,1,?,?, 'demo')")
       .bind(pid, shopId, it.name, it.desc, it.category, it.price, it.mrp, 5 + (i % 4), JSON.stringify(it.attrs), new Date(Date.now() - i * 1000).toISOString()).run();
     await env.DB.prepare("INSERT INTO product_images (id, product_id, shop_id, url, sort, is_stock) VALUES (?,?,?,?,0,1)")
-      .bind(newId(), pid, shopId, `/ph/${slug}-${i}.svg?l=${encodeURIComponent(it.name)}`).run();
+      .bind(newId(), pid, shopId, `/ph/${slug}-${i}.svg?p=${theme.palette}&l=${encodeURIComponent(it.name)}`).run();
   }
   await env.DB.prepare("UPDATE leads SET shop_id = ? WHERE id = ?").bind(shopId, lead.id).run();
   return { shopId, slug };
