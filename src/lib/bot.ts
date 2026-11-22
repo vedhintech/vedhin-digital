@@ -1,6 +1,7 @@
 import type { Env, Shop } from "../types";
 import { newId } from "./id";
-import { bot, PRICING } from "../i18n/hinglish";
+import { PRICING } from "../i18n/hinglish";
+import { BOT_DEFAULT, LANG_NAMES, catalogFor, detectLang, devanagariToRules, hasCatalog, type BotCatalog, type BotLang } from "../i18n/bot";
 import { telegram } from "./notify";
 import { fetchMedia, type Incoming } from "./wa";
 import { getAiProvider } from "../ai/provider";
@@ -26,7 +27,7 @@ interface Ctx {
   sellerId?: string;
   name: string;
 }
-interface State { state: string; data: Record<string, unknown>; change_requests: number; edit_messages: number }
+interface State { state: string; data: Record<string, unknown>; change_requests: number; edit_messages: number; lang: BotLang }
 
 const nowIso = () => new Date().toISOString();
 const today = () => new Date().toISOString().slice(0, 10);
@@ -46,15 +47,15 @@ async function resolve(env: Env, phone: string): Promise<Ctx> {
 }
 
 async function loadState(env: Env, phone: string): Promise<State> {
-  const r = await env.DB.prepare("SELECT state, data_json, change_requests, edit_messages FROM bot_state WHERE phone = ?").bind(phone).first<{ state: string; data_json: string | null; change_requests: number; edit_messages: number }>();
-  if (!r) return { state: "menu", data: {}, change_requests: 0, edit_messages: 0 };
+  const r = await env.DB.prepare("SELECT state, data_json, change_requests, edit_messages, lang FROM bot_state WHERE phone = ?").bind(phone).first<{ state: string; data_json: string | null; change_requests: number; edit_messages: number; lang: string | null }>();
+  if (!r) return { state: "menu", data: {}, change_requests: 0, edit_messages: 0, lang: BOT_DEFAULT };
   let data: Record<string, unknown> = {};
   try { data = r.data_json ? JSON.parse(r.data_json) : {}; } catch { /* reset */ }
-  return { state: r.state, data, change_requests: r.change_requests ?? 0, edit_messages: r.edit_messages ?? 0 };
+  return { state: r.state, data, change_requests: r.change_requests ?? 0, edit_messages: r.edit_messages ?? 0, lang: (r.lang as BotLang) || BOT_DEFAULT };
 }
 async function saveState(env: Env, phone: string, shopId: string | undefined, st: State) {
-  await env.DB.prepare("INSERT INTO bot_state (phone, shop_id, state, data_json, change_requests, edit_messages, updated_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT(phone) DO UPDATE SET shop_id=excluded.shop_id, state=excluded.state, data_json=excluded.data_json, change_requests=excluded.change_requests, edit_messages=excluded.edit_messages, updated_at=excluded.updated_at")
-    .bind(phone, shopId ?? null, st.state, JSON.stringify(st.data), st.change_requests, st.edit_messages, nowIso()).run();
+  await env.DB.prepare("INSERT INTO bot_state (phone, shop_id, state, data_json, change_requests, edit_messages, lang, updated_at) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(phone) DO UPDATE SET shop_id=excluded.shop_id, state=excluded.state, data_json=excluded.data_json, change_requests=excluded.change_requests, edit_messages=excluded.edit_messages, lang=excluded.lang, updated_at=excluded.updated_at")
+    .bind(phone, shopId ?? null, st.state, JSON.stringify(st.data), st.change_requests, st.edit_messages, st.lang, nowIso()).run();
 }
 
 async function logMsg(env: Env, ctx: Ctx, direction: "in" | "out", kind: string, body: string, waId?: string) {
@@ -80,7 +81,7 @@ function normalize(t: string): string {
 }
 
 const STOP_RE = /^(stop|unsubscribe|band karo|band kar do|rok do|mat bhejo|nahi chahiye)\b/;
-const GREET_RE = /^(hi|hello|hey|namaste|namaskar|menu|start|hii+|help me)\b/;
+const GREET_RE = /^(hi|hello|hey|namaste|namaskar|start|hii+|help me)\b|\bmenu\b/;
 const FRUSTRATION_RE = /(bekar|bakwas|kaam nahi kar|nahi chal raha|bug|error|dhokha|fraud|paise wapas|refund)/;
 const CHANGE_RE = /(badal|change|hatao|hata do|lagao|laga do|add kar|bada karo|chhota karo|naya design)/;
 
@@ -114,26 +115,58 @@ async function savePhoto(env: Env, shopId: string, bytes: ArrayBuffer, mime: str
   return `/media/${key}`;
 }
 
-/** Main entry. Returns replies to send; all side effects (DB, alerts) happen here. */
+const translationCache = new Map<string, string>();
+
+/** Languages without a hand-written catalog: translate the English reply with the AI provider (budgeted, cached). Falls back to English. */
+async function localize(env: Env, shop: Shop | undefined, lang: BotLang, replies: string[]): Promise<string[]> {
+  if (hasCatalog(lang) || !shop) return replies;
+  const ai = getAiProvider(env);
+  const out: string[] = [];
+  for (const r of replies) {
+    const key = `${lang}|${r}`;
+    const hit = translationCache.get(key);
+    if (hit) { out.push(hit); continue; }
+    if (!(await aiBudget(env, shop))) { out.push(r); continue; }
+    try {
+      const { text, usage } = await ai.translate(r, LANG_NAMES[lang]);
+      await recordAi(env, shop.id, usage);
+      if (text) {
+        if (translationCache.size > 500) translationCache.clear();
+        translationCache.set(key, text);
+        out.push(text);
+        continue;
+      }
+    } catch { /* keep English */ }
+    out.push(r);
+  }
+  return out;
+}
+
+/** Main entry. Returns replies to send; all side effects (DB, alerts) happen here. The bot answers in the seller's own language. */
 export async function handleIncoming(env: Env, msg: Incoming, baseUrl: string): Promise<string[]> {
   const phone = msg.from.replace(/\D/g, "").slice(-10);
   const ctx = await resolve(env, phone);
-  const text = normalize(msg.text);
   const kind = msg.type === "text" ? "text" : msg.type;
 
   if (ctx.kind === "unknown") {
-    await telegram(env, `Anjaan number ne WhatsApp kiya (…${phone.slice(-4)}): "${msg.text.slice(0, 80)}"`);
-    return [bot.unknownNumber];
+    await telegram(env, `Unknown number messaged on WhatsApp (…${phone.slice(-4)}): "${msg.text.slice(0, 80)}"`);
+    return [catalogFor(detectLang(msg.text) ?? BOT_DEFAULT).unknownNumber];
   }
   const shop = ctx.shop!;
+  const st = await loadState(env, phone);
+  if (msg.type === "text") st.lang = detectLang(msg.text) ?? st.lang;
+  const B = catalogFor(st.lang);
+  // Hindi (Devanagari) keywords are mapped to the rule commands; other scripts are translated to English by AI below.
+  let text = normalize(devanagariToRules(msg.text));
 
   // STOP works everywhere and first: revoke consent, mark lost, never message again.
   if (msg.type === "text" && STOP_RE.test(text)) {
     await logMsg(env, ctx, "in", "text", msg.text, msg.id);
     await env.DB.prepare("UPDATE consents SET revoked_at = ? WHERE phone = ? AND revoked_at IS NULL").bind(nowIso(), phone).run();
     if (ctx.leadId) await env.DB.prepare("UPDATE leads SET stage = 'lost' WHERE id = ? AND stage != 'paid'").bind(ctx.leadId).run();
-    await telegram(env, `STOP: ${shop.name} (…${phone.slice(-4)}) ne band karne ko kaha.`);
-    return [bot.stopped];
+    await telegram(env, `STOP: ${shop.name} (…${phone.slice(-4)}) asked us to stop messaging.`);
+    await saveState(env, phone, shop.id, st);
+    return localize(env, shop, st.lang, [B.stopped]);
   }
 
   // Daily message cap (cost protection). Never silently fail.
@@ -141,8 +174,8 @@ export async function handleIncoming(env: Env, msg: Incoming, baseUrl: string): 
   const todays = (await env.DB.prepare("SELECT COUNT(*) n FROM chat_messages WHERE shop_id = ? AND direction = 'in' AND substr(at,1,10) = ?").bind(shop.id, today()).first<{ n: number }>())?.n ?? 0;
   await logMsg(env, ctx, "in", kind, msg.text, msg.id);
   if (todays >= cap) {
-    if (todays === cap) await telegram(env, `LIMIT: ${shop.name} ka aaj ka bot limit (${cap}) poora.`);
-    return [bot.limitHit];
+    if (todays === cap) await telegram(env, `LIMIT: ${shop.name} reached today's bot limit (${cap}).`);
+    return [B.limitHit];
   }
 
   // Re-opt-in record when a lead writes first (user-initiated contact).
@@ -151,14 +184,25 @@ export async function handleIncoming(env: Env, msg: Incoming, baseUrl: string): 
     if (!has) await env.DB.prepare("INSERT INTO consents (id, lead_id, phone, channel, granted_at, granted_by, note) VALUES (?,?,?,?,?,?,?)").bind(newId(), ctx.leadId, phone, "whatsapp_optin", nowIso(), "seller", "user-initiated message").run();
   }
 
-  const st = await loadState(env, phone);
-  const reply = await route(env, ctx, st, msg, text, baseUrl);
+  // Other Indian scripts: understand by translating the seller's own text to English (AI, budgeted). Only seller text is sent.
+  if (msg.type === "text" && !hasCatalog(st.lang)) {
+    if (await aiBudget(env, shop)) {
+      try {
+        const { text: en, usage } = await getAiProvider(env).translate(msg.text, "English");
+        await recordAi(env, shop.id, usage);
+        if (en) text = normalize(en);
+      } catch { /* keep original text; rules will fall through to "not understood" */ }
+    }
+  }
+
+  const reply = await route(env, ctx, st, msg, text, baseUrl, B);
   await saveState(env, phone, shop.id, st);
-  for (const r of reply) await logMsg(env, ctx, "out", "text", r);
-  return reply;
+  const final = await localize(env, shop, st.lang, reply);
+  for (const r of final) await logMsg(env, ctx, "out", "text", r);
+  return final;
 }
 
-async function route(env: Env, ctx: Ctx, st: State, msg: Incoming, text: string, baseUrl: string): Promise<string[]> {
+async function route(env: Env, ctx: Ctx, st: State, msg: Incoming, text: string, baseUrl: string, bot: BotCatalog): Promise<string[]> {
   const shop = ctx.shop!;
   const link = siteLink(env, shop, baseUrl);
 
@@ -207,8 +251,9 @@ async function route(env: Env, ctx: Ctx, st: State, msg: Incoming, text: string,
 
   // --- greetings and numbered menu ---
   if (GREET_RE.test(text)) { st.state = "menu"; return [bot.menu(ctx.name)]; }
-  if (/^[1-8]$/.test(text)) return menuChoice(env, ctx, st, Number(text), baseUrl);
+  if (/^[1-8]$/.test(text)) return menuChoice(env, ctx, st, Number(text), baseUrl, bot);
   if (text === "design") return [bot.design];
+  if (/\blink\b/.test(text) && !/login|portal/.test(text)) return [bot.shopLink(link)];
 
   // --- design commands (rule based, zero AI cost) ---
   const dm = text.match(/^(rang|color|colour|logo|headline|heading|banner|offer|patti)\s+(.+)$/);
@@ -235,26 +280,26 @@ async function route(env: Env, ctx: Ctx, st: State, msg: Incoming, text: string,
 
   // --- price / stock / sold out ---
   const so = text.match(/^(?:sold ?out|khatam)\s+(.+)$/) ?? text.match(/^(.+?)\s+(?:sold ?out|khatam)$/);
-  if (so) return stockOp(env, shop, so[1]!, { soldOut: true });
+  if (so) return stockOp(env, shop, so[1]!, { soldOut: true }, bot);
   const stk = text.match(/^stock\s+(.+?)\s+(\d{1,4})$/);
-  if (stk) return stockOp(env, shop, stk[1]!, { stock: Number(stk[2]) });
+  if (stk) return stockOp(env, shop, stk[1]!, { stock: Number(stk[2]) }, bot);
   const pr = text.match(/^(.+?)\s+(?:price\s+|rate\s+|₹\s?|rs\.?\s?)?(\d{2,6})\s*(?:rs|rupaye|rupay|₹)?$/);
-  if (pr && !/^(plan|rate|price|stock|dispatch|paid)$/.test(pr[1]!)) return stockOp(env, shop, pr[1]!, { price: Number(pr[2]) });
+  if (pr && !/^(plan|rate|price|stock|dispatch|paid)$/.test(pr[1]!)) return stockOp(env, shop, pr[1]!, { price: Number(pr[2]) }, bot);
 
   // --- affirmation after "extra change" prompt ---
   if (/^(haan|ha|yes|ok|theek hai)$/.test(text) && st.data.pendingExtra) {
     st.data = {};
-    await telegram(env, `EXTRA CHANGE: ${shop.name} ne ₹${PRICING.extraChange} wale extra change ko haan kaha.`);
+    await telegram(env, `EXTRA CHANGE: ${shop.name} agreed to the ₹${PRICING.extraChange} extra change.`);
     return [bot.callNoted];
   }
 
   // --- escalation keywords ---
   if (FRUSTRATION_RE.test(text)) {
-    await telegram(env, `HELP: ${shop.name} (…${ctx.phone.slice(-4)}) pareshan lag raha hai: "${msg.text.slice(0, 100)}"`);
+    await telegram(env, `HELP: ${shop.name} (…${ctx.phone.slice(-4)}) seems frustrated: "${msg.text.slice(0, 100)}"`);
     return [bot.callNoted];
   }
   if (PRICE_RE.test(text)) {
-    await telegram(env, `PRICE SAWAL: ${shop.name} (…${ctx.phone.slice(-4)}): "${msg.text.slice(0, 100)}"`);
+    await telegram(env, `PRICE QUESTION: ${shop.name} (…${ctx.phone.slice(-4)}): "${msg.text.slice(0, 100)}"`);
     return [bot.plan];
   }
 
@@ -274,16 +319,16 @@ async function route(env: Env, ctx: Ctx, st: State, msg: Incoming, text: string,
   }
   if ((st.data.unknownStreak as number) >= 2) {
     st.data.unknownStreak = 0;
-    await telegram(env, `ATKA HUA: ${shop.name} (…${ctx.phone.slice(-4)}) bot samajh nahi paya: "${msg.text.slice(0, 100)}"`);
+    await telegram(env, `STUCK: ${shop.name} (…${ctx.phone.slice(-4)}) the bot did not understand: "${msg.text.slice(0, 100)}"`);
   }
   return [bot.unknown];
 }
 
 async function maybeAlertEdits(env: Env, ctx: Ctx, st: State) {
-  if (st.edit_messages === LIMITS.alertAtEdits) await telegram(env, `INTERESTED: ${ctx.shop!.name} ne ${st.edit_messages} changes kiye. Call karne ka time.`);
+  if (st.edit_messages === LIMITS.alertAtEdits) await telegram(env, `INTERESTED: ${ctx.shop!.name} made ${st.edit_messages} changes. Time to call.`);
 }
 
-async function stockOp(env: Env, shop: Shop, q: string, op: { price?: number; stock?: number; soldOut?: boolean }): Promise<string[]> {
+async function stockOp(env: Env, shop: Shop, q: string, op: { price?: number; stock?: number; soldOut?: boolean }, bot: BotCatalog): Promise<string[]> {
   const found = await findProducts(env, shop.id, q.trim());
   if (!found.length) return [bot.noProduct];
   if (found.length > 1) return [bot.pickProduct(found.slice(0, 4).map((p) => p.name))];
@@ -301,13 +346,13 @@ async function stockOp(env: Env, shop: Shop, q: string, op: { price?: number; st
   return [bot.soldOut(p.name)];
 }
 
-async function menuChoice(env: Env, ctx: Ctx, st: State, n: number, baseUrl: string): Promise<string[]> {
+async function menuChoice(env: Env, ctx: Ctx, st: State, n: number, baseUrl: string, bot: BotCatalog): Promise<string[]> {
   const shop = ctx.shop!;
   const link = siteLink(env, shop, baseUrl);
   switch (n) {
     case 1: return [bot.design];
     case 2: st.state = "await_photo"; return [bot.askPhoto];
-    case 3: return ["Price badalne ke liye likhein: kangan set 499\nStock: stock kangan set 10\nSold out: kangan set khatam"];
+    case 3: return [bot.priceHelp];
     case 4: {
       if (shop.status === "preview" || ctx.kind !== "seller") return [bot.ordersPreview];
       const q = async (sql: string) => ((await env.DB.prepare(sql).bind(shop.id).first<{ n: number }>())?.n ?? 0);
@@ -319,8 +364,8 @@ async function menuChoice(env: Env, ctx: Ctx, st: State, n: number, baseUrl: str
     case 5: return [bot.shopLink(link)];
     case 6: return [bot.plan];
     case 7:
-      await env.DB.prepare("INSERT INTO chat_messages (id, shop_id, lead_id, at, direction, kind, body) VALUES (?,?,?,?,'in','call_request','call chahiye')").bind(newId(), shop.id, ctx.leadId ?? null, nowIso()).run();
-      await telegram(env, `CALL CHAHIYE: ${shop.name} (${ctx.phone}). Jaldi call karein.`);
+      await env.DB.prepare("INSERT INTO chat_messages (id, shop_id, lead_id, at, direction, kind, body) VALUES (?,?,?,?,'in','call_request','call requested')").bind(newId(), shop.id, ctx.leadId ?? null, nowIso()).run();
+      await telegram(env, `CALL REQUESTED: ${shop.name} (${ctx.phone}). Please call soon.`);
       return [bot.callNoted];
     default: {
       if (ctx.kind === "seller") {

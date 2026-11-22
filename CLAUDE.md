@@ -23,7 +23,7 @@ Done-for-you online shop (PWA storefront + seller portal + limited Hinglish What
 6. **WhatsApp:** first outreach only after founder's call + logged consent (`consents` table). Max 30 outreach/day (configurable). Always include "STOP" opt-out. Respect opt-outs immediately.
 7. **Slots, not code:** design changes = changing values in `shop_theme` JSON (colors, font, banner, section order, logo, texts). No free-form HTML from seller or AI.
 8. **Security:** validate all input (zod), rate-limit OTP and public endpoints, escape output, tenant isolation on EVERY query (`WHERE shop_id = ?`), file uploads: type + size checks (max 5 MB, convert to WebP).
-9. **Language:** bot and UI text in simple Hinglish (Roman script) by default. Tone: respectful "aap", "didi/ma'am". Strings live in `src/i18n/hinglish.ts`, never hardcoded.
+9. **Language (updated by founder, 22 Nov):** the website (storefront, seller portal, founder panel) is in standard English. Buyers switch language from the header (11 Indian languages, `src/i18n/ui-*.ts`, English fallback per key). The seller chatbot detects the seller's language (English, Hinglish, Hindi, other Indian languages) and replies in it (`src/i18n/bot.ts`). Strings never hardcoded. Tone: respectful "aap", "didi/ma'am" in Hinglish/Hindi replies.
 10. **Performance:** product pages < 150 KB JS, images lazy + WebP, 3D only in optional hero and off by default.
 
 ## Design

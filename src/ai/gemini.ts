@@ -17,20 +17,28 @@ export class GeminiProvider implements AiProvider {
   }
 
   async draftProductFromPhoto(image: { mime: string; base64: string }) {
-    const prompt = 'Ye ek Indian ladies dress ya jewellery product ki photo hai. Sirf JSON do: {"name": "short product naam (Hinglish, max 6 words)", "description": "ek do line description Hinglish me, sirf jo photo me dikhta hai", "category": "Suits|Kurtis|Sarees|Lehenga|Dupatta|Necklace Sets|Earrings|Bangles|Maang Tikka|Rings|Bridal|Other"}. Price ya jhooth mat likho.';
+    const prompt = 'This is a photo of an Indian ladies dress or jewellery product. Respond only as JSON: {"name": "short product name, max 6 words", "description": "one or two lines describing only what is visible in the photo", "category": "Suits|Kurtis|Sarees|Lehenga|Dupatta|Necklace Sets|Earrings|Bangles|Maang Tikka|Rings|Bridal|Other"}. Do not invent a price or any claim not visible.';
     const { text, usage } = await this.call([{ text: prompt }, { inline_data: { mime_type: image.mime, data: image.base64 } }]);
     let d: Partial<ProductDraft> = {};
     try { d = JSON.parse(text); } catch { /* fall through to defaults */ }
     return {
-      draft: { name: String(d.name ?? "Naya product").slice(0, 80), description: String(d.description ?? "").slice(0, 400), category: String(d.category ?? "Other").slice(0, 40) },
+      draft: { name: String(d.name ?? "New product").slice(0, 80), description: String(d.description ?? "").slice(0, 400), category: String(d.category ?? "Other").slice(0, 40) },
       usage,
     };
   }
 
   async classifyIntent(text: string) {
-    const { text: out, usage } = await this.call([{ text: `Seller message: "${text.slice(0, 300)}". Sirf JSON: {"intent": "add_product|change_design|price_stock|orders|help|call|other"}` }]);
+    const { text: out, usage } = await this.call([{ text: `Seller message (any Indian language): "${text.slice(0, 300)}". Respond only as JSON: {"intent": "add_product|change_design|price_stock|orders|help|call|other"}` }]);
     let intent = "other";
     try { intent = String((JSON.parse(out) as { intent?: string }).intent ?? "other"); } catch { /* keep default */ }
     return { intent, usage };
+  }
+
+  /** Only fixed bot sentences or the seller's own message text are sent: never buyer data. */
+  async translate(text: string, target: string) {
+    const { text: out, usage } = await this.call([{ text: `Translate into ${target}. Keep numbers, links, ₹ amounts, bullet points and line breaks unchanged. Respond only as JSON: {"text": "<translation>"}\n\n${text.slice(0, 1500)}` }]);
+    let t: string | null = null;
+    try { t = String((JSON.parse(out) as { text?: string }).text ?? "") || null; } catch { /* fall back to English */ }
+    return { text: t, usage };
   }
 }

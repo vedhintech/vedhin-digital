@@ -23,7 +23,7 @@ Photo bhejo -> product draft (naam, description) -> seller price deta hai -> pro
 Lead management, preview expiry control, hot-lead alerts (Telegram), consent log, bot cost per seller, conversion numbers. See 07-LEAD-PANEL.md.
 
 ## 4. Out of scope (Phase 1)
-Buyer-side chatbot, buyer login/Gmail, Razorpay auto-payment, live courier API, marketplace/directory, comment-to-DM automation, multi-language beyond Hinglish, native Play Store/App Store apps, 3D heavy pages.
+Buyer-side chatbot, buyer login/Gmail, Razorpay auto-payment, live courier API, marketplace/directory, comment-to-DM automation, multi-language beyond the buyer UI switcher and seller bot language matching (see DECISIONS.md 2026-11-22), native Play Store/App Store apps, 3D heavy pages.
 
 ## 5. Pricing
 - **Setup Rs 1999** one-time. "Lifetime" = jab tak platform chal raha hai, subdomain hosting ke saath, fair-use limits ke andar (define in 08-LEGAL).

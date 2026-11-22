@@ -17,18 +17,23 @@ export interface AiProvider {
   readonly name: string;
   draftProductFromPhoto(image: { mime: string; base64: string }): Promise<{ draft: ProductDraft; usage: UsageInfo }>;
   classifyIntent(text: string): Promise<{ intent: string; usage: UsageInfo }>;
+  /** Translate short bot text. Returns null when no real AI is configured (caller falls back to English). */
+  translate(text: string, target: string): Promise<{ text: string | null; usage: UsageInfo }>;
 }
 
 export class StubAiProvider implements AiProvider {
   readonly name = "stub";
   async draftProductFromPhoto() {
     return {
-      draft: { name: "Naya product", description: "Description yahan aayegi.", category: "other" },
+      draft: { name: "New product", description: "Add a description.", category: "other" },
       usage: { inputTokens: 0, outputTokens: 0 },
     };
   }
   async classifyIntent(text: string) {
     return { intent: text.trim() ? "unknown" : "empty", usage: { inputTokens: 0, outputTokens: 0 } };
+  }
+  async translate() {
+    return { text: null, usage: { inputTokens: 0, outputTokens: 0 } };
   }
 }
 

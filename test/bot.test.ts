@@ -61,10 +61,10 @@ describe("bot conversation", () => {
   it("unknown numbers get a polite reply and the founder is alerted", async () => {
     const r = await say("9000000000", "hello");
     expect(r[0]).toContain("Vedhin Technology");
-    expect(alerts.some((a) => a.includes("Anjaan"))).toBe(true);
+    expect(alerts.some((a) => a.includes("Unknown number"))).toBe(true);
   });
   it("menu and fixed plan text (prices come from constants, never AI)", async () => {
-    expect((await say("9811111111", "hi"))[0]).toContain("1. Design badlo");
+    expect((await say("9811111111", "hi"))[0]).toContain("1. Change design");
     const plan = (await say("9811111111", "6"))[0]!;
     expect(plan).toContain("₹1999");
     expect(plan).toContain("₹499");
@@ -87,8 +87,8 @@ describe("bot conversation", () => {
     c.raw.prepare("INSERT INTO products (id, shop_id, name, price, stock, active, source, created_at) VALUES ('d1','S1','Demo',100,5,1,'demo','2020-01-01')").run();
     expect((await say("9811111111", "2"))[0]).toContain("photo");
     expect((await say("9811111111", "", "image"))[0]).toContain("price");
-    expect((await say("9811111111", "799"))[0]).toContain("Kitne piece");
-    expect((await say("9811111111", "4"))[0]).toContain("jud gaya");
+    expect((await say("9811111111", "799"))[0]).toContain("How many pieces");
+    expect((await say("9811111111", "4"))[0]).toContain("is added");
     expect(c.raw.prepare("SELECT price, stock, source FROM products WHERE source='whatsapp'").get()).toMatchObject({ price: 799, stock: 4 });
     expect((c.raw.prepare("SELECT active FROM products WHERE id='d1'").get() as { active: number }).active).toBe(0);
     expect((c.raw.prepare("SELECT SUM(ai_calls) n FROM bot_usage").get() as { n: number }).n).toBe(1);
@@ -103,48 +103,49 @@ describe("bot conversation", () => {
     seedProduct(c.raw, "p2", "S1", "Kundan Kangan", 600, 5);
     expect((await say("9811111111", "kundan kangan 650"))[0]).toContain("650");
     expect((c.raw.prepare("SELECT price FROM products WHERE id='p2'").get() as { price: number }).price).toBe(650);
-    expect((await say("9811111111", "kangan 499"))[0]).toContain("Kaunsa product");
+    expect((await say("9811111111", "kangan 499"))[0]).toContain("Which product");
     await say("9811111111", "stock kangan set 12");
     expect((c.raw.prepare("SELECT stock FROM products WHERE id='p1'").get() as { stock: number }).stock).toBe(12);
     await say("9811111111", "kangan set khatam");
     expect((c.raw.prepare("SELECT sold_out FROM products WHERE id='p1'").get() as { sold_out: number }).sold_out).toBe(1);
+    // "khatam" is Hinglish, so the bot has switched to Hinglish by now.
     expect((await say("9811111111", "nothere 99"))[0]).toContain("nahi mila");
   });
   it("cannot touch another shop's products (tenant isolation)", async () => {
     seedShop(c.raw, "S2", "other");
     seedProduct(c.raw, "pX", "S2", "Secret Saree", 1000, 5);
-    expect((await say("9811111111", "secret saree 11"))[0]).toContain("nahi mila");
-    expect((await say("9811111111", "secret saree 100"))[0]).toContain("nahi mila");
+    expect((await say("9811111111", "secret saree 11"))[0]).toContain("could not find");
+    expect((await say("9811111111", "secret saree 100"))[0]).toContain("could not find");
     expect((c.raw.prepare("SELECT price FROM products WHERE id='pX'").get() as { price: number }).price).toBe(1000);
   });
   it("STOP revokes consent, marks lead lost, confirms", async () => {
     await say("9811111111", "hi");
     const r = await say("9811111111", "STOP");
-    expect(r[0]).toContain("message nahi bhejenge");
+    expect(r[0]).toContain("will not message you");
     expect((c.raw.prepare("SELECT stage FROM leads WHERE id='LS1'").get() as { stage: string }).stage).toBe("lost");
     expect((c.raw.prepare("SELECT COUNT(*) n FROM consents WHERE revoked_at IS NULL").get() as { n: number }).n).toBe(0);
   });
   it("'7' (call) alerts founder; price question alerts and returns the fixed plan", async () => {
     await say("9811111111", "7");
-    expect(alerts.some((a) => a.includes("CALL CHAHIYE"))).toBe(true);
+    expect(alerts.some((a) => a.includes("CALL REQUESTED"))).toBe(true);
     const r = await say("9811111111", "kitna paisa lagega");
     expect(r[0]).toContain("₹1999");
-    expect(alerts.some((a) => a.includes("PRICE SAWAL"))).toBe(true);
+    expect(alerts.some((a) => a.includes("PRICE QUESTION"))).toBe(true);
   });
   it("voice notes get an honest reply; unknown text twice escalates", async () => {
-    expect((await say("9811111111", "", "audio"))[0]).toContain("Voice note");
+    expect((await say("9811111111", "", "audio"))[0]).toContain("voice notes");
     await say("9811111111", "asdf qwer"); await say("9811111111", "zxcv");
-    expect(alerts.some((a) => a.includes("ATKA HUA"))).toBe(true);
+    expect(alerts.some((a) => a.includes("STUCK"))).toBe(true);
   });
   it("daily message cap protects cost and never fails silently", async () => {
     const now = new Date().toISOString();
     for (let i = 0; i < LIMITS.previewMessagesPerDay; i++) c.raw.prepare("INSERT INTO chat_messages (id, shop_id, at, direction, kind, body) VALUES (?,?,?,'in','text','x')").run("c" + i, "S1", now);
-    expect((await say("9811111111", "menu"))[0]).toContain("limit poori");
+    expect((await say("9811111111", "menu"))[0]).toContain("limit");
     expect(alerts.some((a) => a.includes("LIMIT"))).toBe(true);
   });
   it("AI daily budget blocks photo drafts", async () => {
     for (let i = 0; i < LIMITS.previewAiPerDay; i++) c.raw.prepare("INSERT INTO bot_usage (id, shop_id, day, ai_calls, input_tokens, output_tokens, est_cost_paise) VALUES (?,?,?,1,0,0,0)").run("u" + i, "S1", new Date().toISOString().slice(0, 10));
-    expect((await say("9811111111", "", "image"))[0]).toContain("limit poori");
+    expect((await say("9811111111", "", "image"))[0]).toContain("limit");
   });
 });
 
@@ -158,5 +159,57 @@ describe("paid seller", () => {
     await say("9822222222", "banner hatao please");
     const third = await say("9822222222", "colour badal do");
     expect(third[0]).toContain("₹99");
+  });
+});
+
+describe("seller chat language (replies in the seller's own language)", () => {
+  beforeEach(() => seedLead("9822222222", "SL", "lang-shop"));
+  const stateLang = (phone: string) => (c.raw.prepare("SELECT lang FROM bot_state WHERE phone = ?").get(phone) as { lang: string } | undefined)?.lang;
+
+  it("English in, English out", async () => {
+    expect((await say("9822222222", "please show me the menu"))[0]).toContain("Change design");
+    expect(stateLang("9822222222")).toBe("en");
+  });
+  it("Hinglish in, Hinglish out", async () => {
+    expect((await say("9822222222", "mujhe menu dikhao"))[0]).toContain("Design badlo");
+    expect(stateLang("9822222222")).toBe("hinglish");
+  });
+  it("Hindi (Devanagari) in, Hindi out, and Devanagari commands work", async () => {
+    const r = await say("9822222222", "नमस्ते");
+    expect(r[0]).toContain("डिज़ाइन बदलें");
+    expect(stateLang("9822222222")).toBe("hi");
+    expect((await say("9822222222", "रंग गुलाबी"))[0]).toContain("/s/lang-shop");
+    expect((await say("9822222222", "६"))[0]).toContain("₹1999");
+  });
+  it("short ambiguous messages keep the previous language", async () => {
+    await say("9822222222", "mujhe menu dikhao");
+    expect((await say("9822222222", "6"))[0]).toContain("ek baar");
+    expect(stateLang("9822222222")).toBe("hinglish");
+  });
+  it("seller can switch language mid-chat", async () => {
+    await say("9822222222", "mujhe menu dikhao");
+    expect((await say("9822222222", "i want to see my shop link please"))[0]).toContain("Your shop link");
+    expect(stateLang("9822222222")).toBe("en");
+  });
+  it("other Indian languages (Tamil) fall back to English when no AI is configured, and remember the language", async () => {
+    const r = await say("9822222222", "வணக்கம்");
+    expect(r[0]).toBeTruthy();
+    expect(stateLang("9822222222")).toBe("ta");
+  });
+  it("other Indian languages get AI-translated replies and understood input (translate called with seller text only)", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_u: string, init: { body: string }) => {
+      const body = JSON.parse(init.body);
+      const prompt: string = body.contents[0].parts[0].text;
+      calls.push(prompt);
+      const out = prompt.includes("into English") ? "menu" : "[TA] reply";
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ text: out }) }] } }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 } }), { status: 200 });
+    }));
+    const env = { ...c.env, AI_PROVIDER: "gemini", GEMINI_API_KEY: "k" };
+    const r = await handleIncoming(env, { id: "ta1", from: "919822222222", type: "text", text: "மெனு காட்டு" }, BASE);
+    expect(r[0]).toBe("[TA] reply");
+    expect(calls.some((p) => p.includes("into English") && p.includes("மெனு காட்டு"))).toBe(true);
+    expect(calls.every((p) => !p.includes("9822222222"))).toBe(true);
+    vi.unstubAllGlobals();
   });
 });

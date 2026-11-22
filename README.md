@@ -47,3 +47,8 @@ Panel: import leads, "Demo website banayein", call the seller, record permission
 - Razorpay/Cashfree auto-payment, live courier tracking API, comment-to-DM and the marketplace are Phase 2 (see `docs/01-PRD.md`).
 - Free-tier limits and WhatsApp/Gemini rates change: re-check before launch.
 - Legal text in `docs/08-LEGAL-AND-CONSENT.md` is a working draft: get a CA/lawyer to review.
+
+## Languages
+- Website is English. Buyers pick a language in the header (11 Indian languages). Dictionaries: `src/i18n/ui-en.ts` (source of truth), `ui-hi.ts`, `ui-in.ts`.
+- Seller bot answers in the seller's language (`src/i18n/bot.ts`). For languages beyond English/Hindi/Hinglish set `AI_PROVIDER=gemini` + `GEMINI_API_KEY`; otherwise replies fall back to English.
+- To add a language: add it to `LANGS` in `src/i18n/index.ts` and a dictionary (missing keys fall back to English).

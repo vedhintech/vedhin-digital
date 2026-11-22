@@ -21,7 +21,7 @@ describe("AiProvider", () => {
     const sent = JSON.parse((f.mock.calls[0]![1] as RequestInit).body as string);
     expect(JSON.stringify(sent)).not.toMatch(/phone|address|pincode/i);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "not json" }] } }] }))));
-    expect((await p.draftProductFromPhoto({ mime: "image/jpeg", base64: "A" })).draft.name).toBe("Naya product");
+    expect((await p.draftProductFromPhoto({ mime: "image/jpeg", base64: "A" })).draft.name).toBe("New product");
   });
   it("propagates provider errors so the caller can reply gracefully", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("no", { status: 429 })));
