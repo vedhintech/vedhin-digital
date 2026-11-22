@@ -66,3 +66,6 @@ Workers Builds runs `npx wrangler preview` for non-production branches. That com
   Without them the preview admin login stays closed, which is safe.
 - When you add a migration, apply it to the preview database too: `npx wrangler d1 migrations apply vedhin-db-preview --remote`.
 - The production deploy command stays `npx wrangler deploy` (branch `main`).
+
+## WhatsApp click-to-chat
+Set the plain variable `WHATSAPP_BOT_NUMBER` (digits with country code, e.g. `919876543210`) in Cloudflare. The founder panel then shows a "Bot chat link" on each lead and the seller portal shows an "Open WhatsApp chat" button. The seller taps it, sends "Hi", and the free 24-hour reply window opens.

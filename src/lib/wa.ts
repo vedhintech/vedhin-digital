@@ -61,3 +61,10 @@ export async function fetchMedia(env: Env, mediaId: string, kind: "image" | "aud
     return null;
   }
 }
+
+/** wa.me click-to-chat link to the bot. The seller taps it, sends the prefilled text, and the free 24h window opens. */
+export function botChatLink(env: Env, text = "Hi"): string | null {
+  const n = (env.WHATSAPP_BOT_NUMBER ?? "").replace(/\D/g, "");
+  if (n.length < 10 || n.length > 15) return null;
+  return `https://wa.me/${n}?text=${encodeURIComponent(text)}`;
+}
