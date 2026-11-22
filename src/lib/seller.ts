@@ -27,26 +27,26 @@ export const CATEGORY_DEFAULTS: Record<string, string[]> = {
 
 export const ATTR_FIELDS: Record<string, { key: string; label: string; type?: "text" | "bool" }[]> = {
   ladies_dress: [
-    { key: "fabric", label: "Fabric (jaise cotton, georgette)" },
+    { key: "fabric", label: "Fabric (e.g. cotton, georgette)" },
     { key: "work", label: "Work (bandhej, block print, embroidery)" },
     { key: "occasion", label: "Occasion" },
     { key: "sizes", label: "Sizes (S, M, L, XL)" },
-    { key: "color", label: "Rang" },
-    { key: "care", label: "Dhone ka tareeka" },
-    { key: "ready_stock", label: "Ready stock hai", type: "bool" },
+    { key: "color", label: "Colour" },
+    { key: "care", label: "Care instructions" },
+    { key: "ready_stock", label: "Ready stock", type: "bool" },
   ],
   jewellery: [
     { key: "material", label: "Material" },
     { key: "plating", label: "Plating" },
     { key: "stone", label: "Stone" },
-    { key: "size", label: "Size (bangle size jaise 2.4)" },
+    { key: "size", label: "Size (bangle size, e.g. 2.4)" },
     { key: "occasion", label: "Occasion" },
-    { key: "care_note", label: "Dekhbhal" },
+    { key: "care_note", label: "Care" },
     { key: "anti_tarnish", label: "Anti-tarnish", type: "bool" },
-    { key: "ready_stock", label: "Ready stock hai", type: "bool" },
-    { key: "gift_packaging", label: "Gift packing milti hai", type: "bool" },
+    { key: "ready_stock", label: "Ready stock", type: "bool" },
+    { key: "gift_packaging", label: "Gift packaging available", type: "bool" },
   ],
-  other: [{ key: "ready_stock", label: "Ready stock hai", type: "bool" }],
+  other: [{ key: "ready_stock", label: "Ready stock", type: "bool" }],
 };
 
 export function attrsFromForm(category: string | null, form: Record<string, unknown>): string {

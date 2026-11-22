@@ -32,29 +32,29 @@ type Tab = "home" | "orders" | "products" | "shop" | "help";
 
 export function portal(shop: Shop, active: Tab, title: string, body: Raw | string, flash?: { m?: string; e?: string }): string {
   const tab = (id: Tab, href: string, label: string) => `<a href="${href}" ${active === id ? 'aria-current="page"' : ""}>${label}</a>`;
-  return `<!doctype html><html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} | Vedhin</title><meta name="robots" content="noindex"><meta name="theme-color" content="#3B2A8C">
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} | Vedhin</title><meta name="robots" content="noindex"><meta name="theme-color" content="#3B2A8C">
 <link rel="manifest" href="/seller/manifest.webmanifest"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind:wght@400;500;600&display=swap"><style>${CSS}</style></head><body>
 <div class="top"><b>${esc(shop.name)}</b><form method="post" action="/seller/logout"><button class="btn s" style="min-height:40px">Logout</button></form></div>
 <div class="w">${flash?.m ? `<div class="msg" role="status">${esc(flash.m)}</div>` : ""}${flash?.e ? `<div class="msg e" role="alert">${esc(flash.e)}</div>` : ""}${body}</div>
-<nav class="tabs" aria-label="Menu">${tab("home", "/seller", "Home")}${tab("orders", "/seller/orders", "Orders")}${tab("products", "/seller/products", "Products")}${tab("shop", "/seller/shop", "Dukaan")}${tab("help", "/seller/help", "Help")}</nav></body></html>`;
+<nav class="tabs" aria-label="Menu">${tab("home", "/seller", "Home")}${tab("orders", "/seller/orders", "Orders")}${tab("products", "/seller/products", "Products")}${tab("shop", "/seller/shop", "Shop")}${tab("help", "/seller/help", "Help")}</nav></body></html>`;
 }
 
 export function loginPage(error?: string): string {
-  return `<!doctype html><html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Seller login | Vedhin</title><meta name="robots" content="noindex"><style>${CSS}</style></head><body><div class="w" style="padding-top:48px"><h1>Seller login</h1>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Seller login | Vedhin</title><meta name="robots" content="noindex"><style>${CSS}</style></head><body><div class="w" style="padding-top:48px"><h1>Seller login</h1>
 ${error ? `<div class="msg e" role="alert">${esc(error)}</div>` : ""}
-<div class="card"><p>Login ke liye Vedhin Technology se mila hua <strong>login link</strong> kholiye. Link WhatsApp par aata hai.</p><p class="muted">Link purana ho gaya ho to Vedhin se naya link maang lein.</p></div></div></body></html>`;
+<div class="card"><p>Open the <strong>login link</strong> you received from Vedhin Technology. It arrives on WhatsApp.</p><p class="muted">If the link has expired, ask Vedhin for a new one.</p></div></div></body></html>`;
 }
 
-export const ORDER_FILTERS: Record<string, string> = { new: "Naye", payment: "Payment check karein", pack: "Pack karna hai", dispatched: "Bheje gaye", all: "Sab" };
+export const ORDER_FILTERS: Record<string, string> = { new: "New", payment: "Check payment", pack: "To pack", dispatched: "Dispatched", all: "All" };
 
 export function chipFor(o: { status: string; payment_status: string }): Raw {
-  if (o.status === "cancelled") return html`<span class="chip r">Cancel</span>`;
+  if (o.status === "cancelled") return html`<span class="chip r">Cancelled</span>`;
   if (o.status === "delivered") return html`<span class="chip g">Delivered</span>`;
   if (o.status === "dispatched") return html`<span class="chip g">Dispatched</span>`;
-  if (o.payment_status === "proof_uploaded") return html`<span class="chip y">Payment check karein</span>`;
-  if (o.payment_status === "pending") return html`<span class="chip y">Payment baaki</span>`;
+  if (o.payment_status === "proof_uploaded") return html`<span class="chip y">Check payment</span>`;
+  if (o.payment_status === "pending") return html`<span class="chip y">Payment pending</span>`;
   if (o.status === "packed") return html`<span class="chip">Packed</span>`;
-  return html`<span class="chip g">Pack karna hai</span>`;
+  return html`<span class="chip g">To pack</span>`;
 }
 
 export function productForm(shop: Shop, p: Record<string, unknown> | null, attrs: Record<string, unknown>): Raw {
@@ -62,14 +62,14 @@ export function productForm(shop: Shop, p: Record<string, unknown> | null, attrs
   const cats = CATEGORY_DEFAULTS[cat] ?? CATEGORY_DEFAULTS.other!;
   const fields = ATTR_FIELDS[cat] ?? ATTR_FIELDS.other!;
   const v = (k: string) => (p ? (p[k] as string | number | null) ?? "" : "");
-  return html`<label for="name">Product ka naam</label><input id="name" name="name" required maxlength="80" value="${v("name")}">
+  return html`<label for="name">Product name</label><input id="name" name="name" required maxlength="80" value="${v("name")}">
 <label for="description">Description</label><textarea id="description" name="description" maxlength="600">${v("description")}</textarea>
 <label for="category">Category</label><select id="category" name="category">${cats.map((c) => html`<option ${String(v("category")).toLowerCase() === c.toLowerCase() ? "selected" : ""}>${c}</option>`)}</select>
 <div class="row"><div style="flex:1"><label for="price">Price (₹)</label><input id="price" name="price" type="number" inputmode="numeric" min="1" max="500000" required value="${v("price")}"></div>
 <div style="flex:1"><label for="mrp">MRP (₹, optional)</label><input id="mrp" name="mrp" type="number" inputmode="numeric" min="0" max="500000" value="${v("mrp")}"></div></div>
-<label for="stock">Kitna stock hai</label><input id="stock" name="stock" type="number" inputmode="numeric" min="0" max="9999" required value="${p ? v("stock") : 1}">
-<label for="image">Photo (camera ya gallery se)</label><input id="image" name="image" type="file" accept="image/*" capture="environment">
-<label for="image_url">Ya photo ka link (optional)</label><input id="image_url" name="image_url" type="url" placeholder="https://...">
+<label for="stock">Stock quantity</label><input id="stock" name="stock" type="number" inputmode="numeric" min="0" max="9999" required value="${p ? v("stock") : 1}">
+<label for="image">Photo (camera or gallery)</label><input id="image" name="image" type="file" accept="image/*" capture="environment">
+<label for="image_url">Or a photo link (optional)</label><input id="image_url" name="image_url" type="url" placeholder="https://...">
 <h2>Details</h2>
 ${fields.map((f) => (f.type === "bool" ? html`<div class="cb"><input type="checkbox" id="a_${f.key}" name="a_${f.key}" ${attrs[f.key] === true ? "checked" : ""}><label for="a_${f.key}">${f.label}</label></div>` : html`<label for="a_${f.key}">${f.label}</label><input id="a_${f.key}" name="a_${f.key}" maxlength="80" value="${(attrs[f.key] as string) ?? ""}">`))}`;
 }
@@ -77,15 +77,15 @@ ${fields.map((f) => (f.type === "bool" ? html`<div class="cb"><input type="check
 export function themeForm(shop: Shop): Raw {
   const th = parseTheme(shop.theme_json, shop.name, shop.category);
   return html`<label for="headline">Main headline</label><input id="headline" name="headline" maxlength="90" value="${th.hero.headline}">
-<label for="sub">Headline ke neeche line</label><input id="sub" name="sub" maxlength="160" value="${th.hero.sub}">
-<label for="cta">Button ka text</label><input id="cta" name="cta" maxlength="30" value="${th.hero.cta}">
-<label for="announcement">Upar ki patti (offer / delivery)</label><input id="announcement" name="announcement" maxlength="120" value="${th.announcement}">
-<label for="story">Dukaan ke baare me</label><textarea id="story" name="story" maxlength="600">${th.story}</textarea>
-<label>Rang</label><div class="sw">${Object.values(PALETTES).map((p) => html`<label><input type="radio" name="palette" value="${p.id}" ${th.palette === p.id ? "checked" : ""}><span style="width:18px;height:18px;border-radius:50%;background:${raw(esc(p.primary))};display:inline-block"></span>${p.label}</label>`)}</div>
-<label for="logo_text">Logo ka naam</label><input id="logo_text" name="logo_text" maxlength="18" value="${th.logo.text}">
-<label for="logo_icon">Logo ka nishan</label><select id="logo_icon" name="logo_icon">${["lotus", "mirror", "jhumka", "bangle", "bindi"].map((i) => html`<option ${th.logo.icon === i ? "selected" : ""}>${i}</option>`)}</select>
-<label for="logo_layout">Logo ka style</label><select id="logo_layout" name="logo_layout">${["stacked", "inline", "monogram"].map((i) => html`<option ${th.logo.layout === i ? "selected" : ""}>${i}</option>`)}</select>
-<label>Kaunse hisse dikhane hain</label><div class="sw">${ALL_SECTIONS.filter((s) => s !== "footer").map((s) => html`<label><input type="checkbox" name="sections" value="${s}" ${th.sections.includes(s) ? "checked" : ""}>${s.replace(/_/g, " ")}</label>`)}</div>`;
+<label for="sub">Line under the headline</label><input id="sub" name="sub" maxlength="160" value="${th.hero.sub}">
+<label for="cta">Button text</label><input id="cta" name="cta" maxlength="30" value="${th.hero.cta}">
+<label for="announcement">Top bar (offer / delivery)</label><input id="announcement" name="announcement" maxlength="120" value="${th.announcement}">
+<label for="story">About the shop</label><textarea id="story" name="story" maxlength="600">${th.story}</textarea>
+<label>Colour</label><div class="sw">${Object.values(PALETTES).map((p) => html`<label><input type="radio" name="palette" value="${p.id}" ${th.palette === p.id ? "checked" : ""}><span style="width:18px;height:18px;border-radius:50%;background:${raw(esc(p.primary))};display:inline-block"></span>${p.label}</label>`)}</div>
+<label for="logo_text">Logo text</label><input id="logo_text" name="logo_text" maxlength="18" value="${th.logo.text}">
+<label for="logo_icon">Logo symbol</label><select id="logo_icon" name="logo_icon">${["lotus", "mirror", "jhumka", "bangle", "bindi"].map((i) => html`<option ${th.logo.icon === i ? "selected" : ""}>${i}</option>`)}</select>
+<label for="logo_layout">Logo style</label><select id="logo_layout" name="logo_layout">${["stacked", "inline", "monogram"].map((i) => html`<option ${th.logo.layout === i ? "selected" : ""}>${i}</option>`)}</select>
+<label>Sections to show</label><div class="sw">${ALL_SECTIONS.filter((s) => s !== "footer").map((s) => html`<label><input type="checkbox" name="sections" value="${s}" ${th.sections.includes(s) ? "checked" : ""}>${s.replace(/_/g, " ")}</label>`)}</div>`;
 }
 
 export { rupees, safeUrl, html, raw, esc };

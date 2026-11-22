@@ -27,12 +27,12 @@ seller.get("/seller/manifest.webmanifest", (c) =>
 seller.get("/seller/login", async (c) => {
   const token = c.req.query("token");
   if (!token) return c.html(loginPage());
-  if (!rateLimit(`login:${clientIp(c.req.raw)}`, 20, 10 * 60_000)) return c.html(loginPage("Thodi der baad try karein."), 429);
+  if (!rateLimit(`login:${clientIp(c.req.raw)}`, 20, 10 * 60_000)) return c.html(loginPage("Please try again shortly."), 429);
   const hash = await sha256Hex(token);
   const row = await c.env.DB.prepare("SELECT id, seller_id, expires_at, used_at FROM seller_login_tokens WHERE token_hash = ?").bind(hash).first<{ id: string; seller_id: string; expires_at: string; used_at: string | null }>();
-  if (!row || row.used_at || new Date(row.expires_at).getTime() < Date.now()) return c.html(loginPage("Ye login link purana ya use ho chuka hai. Vedhin se naya link maangein."), 401);
+  if (!row || row.used_at || new Date(row.expires_at).getTime() < Date.now()) return c.html(loginPage("This login link has expired or was already used. Ask Vedhin for a new link."), 401);
   const upd = (await c.env.DB.prepare("UPDATE seller_login_tokens SET used_at = ? WHERE id = ? AND used_at IS NULL").bind(new Date().toISOString(), row.id).run()) as { meta?: { changes?: number } };
-  if ((upd.meta?.changes ?? 0) < 1) return c.html(loginPage("Ye login link use ho chuka hai."), 401);
+  if ((upd.meta?.changes ?? 0) < 1) return c.html(loginPage("This login link was already used."), 401);
   await c.env.DB.prepare("UPDATE sellers SET last_login_at = ? WHERE id = ?").bind(new Date().toISOString(), row.seller_id).run();
   const session = await signSession({ role: "seller", id: row.seller_id, exp: Math.floor(Date.now() / 1000) + 30 * 86400 }, secretOf(c.env));
   setCookie(c, SELLER_COOKIE, session, { httpOnly: true, secure: secure(c.env), sameSite: "Lax", path: "/", maxAge: 30 * 86400 });
@@ -53,7 +53,7 @@ const guard: MiddlewareHandler<AppBindings> = async (c, next) => {
   const s = await c.env.DB.prepare("SELECT shop_id FROM sellers WHERE id = ?").bind(p.id).first<{ shop_id: string }>();
   const shop = s ? await c.env.DB.prepare(SHOP_SELECT).bind(s.shop_id).first<Shop>() : null;
   if (!shop) return c.redirect("/seller/login");
-  if (shop.status === "suspended") return c.html(loginPage("Ye dukaan abhi band hai. Vedhin Technology se sampark karein."), 403);
+  if (shop.status === "suspended") return c.html(loginPage("This shop is currently closed. Please contact Vedhin Technology."), 403);
   c.set("shop", shop);
   c.set("sellerId", p.id);
   await next();
@@ -77,12 +77,12 @@ seller.get("/seller", async (c) => {
     q("SELECT COALESCE(SUM(total),0) n FROM orders WHERE shop_id = ? AND payment_status IN ('confirmed','cod') AND status != 'cancelled'", shop.id),
   ]);
   const link = `${new URL(c.req.url).origin}/s/${shop.slug}`;
-  const body = html`<h1>Namaste</h1><p class="muted">${shop.status === "preview" ? "Aapki dukaan abhi preview me hai." : "Aapki dukaan live hai."}</p>
-<div class="stats"><div class="card"><strong>${todayOrders}</strong>Aaj ke orders</div><div class="card"><strong>${payCheck}</strong>Payment check karein</div><div class="card"><strong>${toPack}</strong>Pack/dispatch karna hai</div><div class="card"><strong>${low}</strong>Kam stock</div></div>
-<div class="card"><div class="muted">Ab tak ki confirmed sale</div><strong style="font-size:26px">${rupees(total)}</strong></div>
-<div class="card"><strong>Aapki dukaan ka link</strong><p style="word-break:break-all"><a href="${link}">${link}</a></p>
-<p><a class="btn s" href="https://wa.me/?text=${encodeURIComponent(`${shop.name}: ${link}`)}">WhatsApp par share karein</a></p></div>
-<a class="btn big" href="/seller/products/new">Naya product jodein</a>`;
+  const body = html`<h1>Welcome</h1><p class="muted">${shop.status === "preview" ? "Your shop is in preview." : "Your shop is live."}</p>
+<div class="stats"><div class="card"><strong>${todayOrders}</strong>Orders today</div><div class="card"><strong>${payCheck}</strong>Check payment</div><div class="card"><strong>${toPack}</strong>To pack or dispatch</div><div class="card"><strong>${low}</strong>Low stock</div></div>
+<div class="card"><div class="muted">Confirmed sales so far</div><strong style="font-size:26px">${rupees(total)}</strong></div>
+<div class="card"><strong>Your shop link</strong><p style="word-break:break-all"><a href="${link}">${link}</a></p>
+<p><a class="btn s" href="https://wa.me/?text=${encodeURIComponent(`${shop.name}: ${link}`)}">Share on WhatsApp</a></p></div>
+<a class="btn big" href="/seller/products/new">Add a new product</a>`;
   return c.html(portal(shop, "home", "Home", body, flash(c)));
 });
 
@@ -90,15 +90,15 @@ seller.get("/seller", async (c) => {
 seller.get("/seller/products", async (c) => {
   const shop = c.var.shop;
   const { results } = await c.env.DB.prepare("SELECT p.id, p.name, p.price, p.stock, p.sold_out, p.source, (SELECT url FROM product_images WHERE product_id = p.id ORDER BY sort LIMIT 1) AS image FROM products p WHERE p.shop_id = ? AND p.active = 1 ORDER BY p.created_at DESC").bind(shop.id).all<{ id: string; name: string; price: number; stock: number; sold_out: number; source: string; image: string | null }>();
-  const body = html`<div class="row"><h1>Products</h1><a class="btn" href="/seller/products/new">Naya</a></div>
+  const body = html`<div class="row"><h1>Products</h1><a class="btn" href="/seller/products/new">New</a></div>
 ${results.length ? results.map((p) => html`<div class="card"><div class="row"><div style="display:flex;gap:12px;align-items:center">${safeUrl(p.image) ? raw(`<img class="thumb" src="${safeUrl(p.image)}" alt="">`) : html`<div class="thumb"></div>`}<div><strong>${p.name}</strong><div>${rupees(p.price)} <span class="muted">stock ${p.stock}</span></div>${p.source === "demo" ? html`<span class="chip">Demo product</span>` : ""}${p.sold_out ? html`<span class="chip r">Sold out</span>` : ""}</div></div>
-<a class="btn s" href="/seller/products/${p.id}">Badlein</a></div></div>`) : html`<div class="card">Abhi koi product nahi. "Naya" dabakar pehla product jodein.</div>`}`;
+<a class="btn s" href="/seller/products/${p.id}">Edit</a></div></div>`) : html`<div class="card">No products yet. Tap "New" to add your first product.</div>`}`;
   return c.html(portal(shop, "products", "Products", body, flash(c)));
 });
 
 seller.get("/seller/products/new", (c) => {
   const shop = c.var.shop;
-  return c.html(portal(shop, "products", "Naya product", html`<h1>Naya product</h1><form class="card" method="post" action="/seller/products" enctype="multipart/form-data">${productForm(shop, null, {})}<p><button class="btn big">Product jodein</button></p></form>`, flash(c)));
+  return c.html(portal(shop, "products", "New product", html`<h1>New product</h1><form class="card" method="post" action="/seller/products" enctype="multipart/form-data">${productForm(shop, null, {})}<p><button class="btn big">Product jodein</button></p></form>`, flash(c)));
 });
 
 const productSchema = z.object({
@@ -124,10 +124,10 @@ seller.post("/seller/products", async (c) => {
   const shop = c.var.shop;
   const form = await c.req.parseBody();
   const parsed = productSchema.safeParse(form);
-  if (!parsed.success) return c.redirect(back("/seller/products/new", undefined, "Naam, price aur stock sahi bharein."));
+  if (!parsed.success) return c.redirect(back("/seller/products/new", undefined, "Enter a valid name, price and stock."));
   const d = parsed.data;
   const count = (await c.env.DB.prepare("SELECT COUNT(*) n FROM products WHERE shop_id = ? AND active = 1 AND source != 'demo'").bind(shop.id).first<{ n: number }>())?.n ?? 0;
-  if (count >= PRODUCT_LIMIT(shop.plan)) return c.redirect(back("/seller/products", undefined, `Aapke plan me ${PRODUCT_LIMIT(shop.plan)} products tak ki limit hai. Zyada ke liye Vedhin se baat karein.`));
+  if (count >= PRODUCT_LIMIT(shop.plan)) return c.redirect(back("/seller/products", undefined, `Your plan allows up to ${PRODUCT_LIMIT(shop.plan)} products. Contact Vedhin for more.`));
   const id = newId();
   await c.env.DB.prepare("INSERT INTO products (id, shop_id, name, description, category, price, mrp, stock, active, attributes_json, created_at, source) VALUES (?,?,?,?,?,?,?,?,1,?,?,'portal')")
     .bind(id, shop.id, d.name, d.description, d.category, d.price, d.mrp || null, d.stock, attrsFromForm(shop.category, form), new Date().toISOString()).run();
@@ -136,7 +136,7 @@ seller.post("/seller/products", async (c) => {
   // Real product replaces one stock demo product (demo items never stay beside real ones).
   await c.env.DB.prepare("UPDATE products SET active = 0 WHERE id = (SELECT id FROM products WHERE shop_id = ? AND source = 'demo' AND active = 1 ORDER BY created_at LIMIT 1) AND shop_id = ?").bind(shop.id, shop.id).run();
   await c.env.DB.prepare("INSERT INTO preview_events (id, shop_id, at, type, meta_json) VALUES (?,?,?,?,?)").bind(newId(), shop.id, new Date().toISOString(), "change", '{"what":"product_added"}').run();
-  return c.redirect(back("/seller/products", "Product jud gaya."));
+  return c.redirect(back("/seller/products", "Product added."));
 });
 
 async function ownProduct(c: { env: AppBindings["Bindings"] }, shopId: string, id: string) {
@@ -146,11 +146,11 @@ async function ownProduct(c: { env: AppBindings["Bindings"] }, shopId: string, i
 seller.get("/seller/products/:id", async (c) => {
   const shop = c.var.shop;
   const p = await ownProduct(c, shop.id, c.req.param("id"));
-  if (!p) return c.redirect(back("/seller/products", undefined, "Product nahi mila."));
+  if (!p) return c.redirect(back("/seller/products", undefined, "Product not found."));
   let attrs: Record<string, unknown> = {};
   try { attrs = JSON.parse((p.attributes_json as string) || "{}"); } catch { /* ignore */ }
-  const body = html`<h1>Product badlein</h1><form class="card" method="post" action="/seller/products/${p.id as string}" enctype="multipart/form-data">${productForm(shop, p, attrs)}<p><button class="btn big">Save karein</button></p></form>
-<form method="post" action="/seller/products/${p.id as string}/soldout"><button class="btn s big">${p.sold_out ? "Wapas available karein" : "Sold out karein"}</button></form>
+  const body = html`<h1>Edit product</h1><form class="card" method="post" action="/seller/products/${p.id as string}" enctype="multipart/form-data">${productForm(shop, p, attrs)}<p><button class="btn big">Save</button></p></form>
+<form method="post" action="/seller/products/${p.id as string}/soldout"><button class="btn s big">${p.sold_out ? "Mark as available" : "Mark as sold out"}</button></form>
 <form method="post" action="/seller/products/${p.id as string}/delete" style="margin-top:12px"><button class="btn er big">Product hatayein</button></form>`;
   return c.html(portal(shop, "products", "Product", body, flash(c)));
 });
@@ -158,10 +158,10 @@ seller.get("/seller/products/:id", async (c) => {
 seller.post("/seller/products/:id", async (c) => {
   const shop = c.var.shop;
   const id = c.req.param("id");
-  if (!(await ownProduct(c, shop.id, id))) return c.redirect(back("/seller/products", undefined, "Product nahi mila."));
+  if (!(await ownProduct(c, shop.id, id))) return c.redirect(back("/seller/products", undefined, "Product not found."));
   const form = await c.req.parseBody();
   const parsed = productSchema.safeParse(form);
-  if (!parsed.success) return c.redirect(back(`/seller/products/${id}`, undefined, "Naam, price aur stock sahi bharein."));
+  if (!parsed.success) return c.redirect(back(`/seller/products/${id}`, undefined, "Enter a valid name, price and stock."));
   const d = parsed.data;
   await c.env.DB.prepare("UPDATE products SET name=?, description=?, category=?, price=?, mrp=?, stock=?, attributes_json=?, sold_out = CASE WHEN ? > 0 THEN 0 ELSE sold_out END WHERE id = ? AND shop_id = ?")
     .bind(d.name, d.description, d.category, d.price, d.mrp || null, d.stock, attrsFromForm(shop.category, form), d.stock, id, shop.id).run();
@@ -170,12 +170,12 @@ seller.post("/seller/products/:id", async (c) => {
     await c.env.DB.prepare("DELETE FROM product_images WHERE product_id = ? AND shop_id = ?").bind(id, shop.id).run();
     await c.env.DB.prepare("INSERT INTO product_images (id, product_id, shop_id, url, sort, is_stock) VALUES (?,?,?,?,0,0)").bind(newId(), id, shop.id, img).run();
   }
-  return c.redirect(back("/seller/products", "Product save ho gaya."));
+  return c.redirect(back("/seller/products", "Product saved."));
 });
 
 seller.post("/seller/products/:id/soldout", async (c) => {
   await c.env.DB.prepare("UPDATE products SET sold_out = 1 - sold_out WHERE id = ? AND shop_id = ?").bind(c.req.param("id"), c.var.shop.id).run();
-  return c.redirect(back("/seller/products", "Update ho gaya."));
+  return c.redirect(back("/seller/products", "Updated."));
 });
 seller.post("/seller/products/:id/delete", async (c) => {
   await c.env.DB.prepare("UPDATE products SET active = 0 WHERE id = ? AND shop_id = ?").bind(c.req.param("id"), c.var.shop.id).run();
@@ -188,7 +188,7 @@ seller.post("/seller/api/draft-from-photo", async (c) => {
   const day = new Date().toISOString().slice(0, 10);
   const used = (await c.env.DB.prepare("SELECT COALESCE(SUM(ai_calls),0) n FROM bot_usage WHERE shop_id = ? AND day = ?").bind(shop.id, day).first<{ n: number }>())?.n ?? 0;
   const limit = shop.status === "preview" ? 10 : 30;
-  if (used >= limit) return c.json({ error: "Aaj ki AI limit poori ho gayi. Kal dobara try karein ya Vedhin se baat karein." }, 429);
+  if (used >= limit) return c.json({ error: "Today's AI limit is used up. Try again tomorrow or contact Vedhin." }, 429);
   const form = await c.req.parseBody();
   const f = form.image;
   if (!(f instanceof File) || f.size === 0 || f.size > 5 * 1024 * 1024 || !/^image\/(jpeg|png|webp)$/.test(f.type)) return c.json({ error: "Sahi photo chunein (5 MB tak)." }, 400);
@@ -214,7 +214,7 @@ seller.get("/seller/orders", async (c) => {
   const f = FILTER_SQL[c.req.query("f") ?? ""] ? (c.req.query("f") as string) : "all";
   const { results } = await c.env.DB.prepare(`SELECT id, number, created_at, buyer_name, city, total, status, payment_status, payment_method FROM orders WHERE shop_id = ? AND ${FILTER_SQL[f]} ORDER BY created_at DESC LIMIT 100`).bind(shop.id).all<{ id: string; number: number; buyer_name: string; city: string; total: number; status: string; payment_status: string }>();
   const body = html`<h1>Orders</h1><div class="sw" style="margin:10px 0">${Object.entries(ORDER_FILTERS).map(([k, label]) => html`<a class="btn ${k === f ? "" : "s"}" style="min-height:40px" href="/seller/orders?f=${k}">${label}</a>`)}</div>
-${results.length ? results.map((o) => html`<a class="card" style="display:block;text-decoration:none;color:inherit" href="/seller/orders/${o.id}"><div class="row"><strong>#${o.number} ${o.buyer_name}</strong><span>${rupees(o.total)}</span></div><div class="row"><span class="muted">${o.city}</span>${chipFor(o)}</div></a>`) : html`<div class="card">Is list me abhi koi order nahi.</div>`}`;
+${results.length ? results.map((o) => html`<a class="card" style="display:block;text-decoration:none;color:inherit" href="/seller/orders/${o.id}"><div class="row"><strong>#${o.number} ${o.buyer_name}</strong><span>${rupees(o.total)}</span></div><div class="row"><span class="muted">${o.city}</span>${chipFor(o)}</div></a>`) : html`<div class="card">No orders in this list yet.</div>`}`;
   return c.html(portal(shop, "orders", "Orders", body, flash(c)));
 });
 
@@ -225,7 +225,7 @@ async function ownOrder(c: { env: AppBindings["Bindings"] }, shopId: string, id:
 seller.get("/seller/orders/:id", async (c) => {
   const shop = c.var.shop;
   const o = await ownOrder(c, shop.id, c.req.param("id"));
-  if (!o) return c.redirect(back("/seller/orders", undefined, "Order nahi mila."));
+  if (!o) return c.redirect(back("/seller/orders", undefined, "Order not found."));
   const { results: items } = await c.env.DB.prepare("SELECT name, qty, price FROM order_items WHERE order_id = ? AND shop_id = ?").bind(o.id, shop.id).all<{ name: string; qty: number; price: number }>();
   const { results: couriers } = await c.env.DB.prepare("SELECT id, name FROM couriers ORDER BY name").all<{ id: string; name: string }>();
   const st = o.status as string, ps = o.payment_status as string;
@@ -237,15 +237,15 @@ seller.get("/seller/orders/:id", async (c) => {
 <div class="card"><strong>${o.buyer_name as string}</strong><br><a href="tel:${o.buyer_phone as string}">${o.buyer_phone as string}</a><br>${o.address as string}<br>${o.city as string} - ${o.pincode as string}</div>
 <div class="card">${items.map((i) => html`<div class="row"><span>${i.name} x ${i.qty}</span><span>${rupees(i.price * i.qty)}</span></div>`)}<div class="row"><strong>Total</strong><strong>${rupees(o.total as number)}</strong></div>
 <div class="muted">${o.payment_method === "cod" ? "Cash on delivery" : "UPI"}${o.utr ? " | UTR: " + o.utr : ""}</div></div>
-${canPay ? html`<div class="card"><strong>Payment</strong><p class="muted">Pehle apne bank / UPI app me paisa aaya hai ya nahi dekhein, tabhi confirm karein.</p>
-<form method="post" action="/seller/orders/${o.id as string}/payment" class="row"><button name="action" value="confirm" class="btn ok" style="flex:1">Paisa aa gaya, confirm karein</button><button name="action" value="reject" class="btn er">Nahi aaya</button></form></div>` : ""}
-${canConfirmCod ? html`<form method="post" action="/seller/orders/${o.id as string}/payment"><button name="action" value="confirm" class="btn ok big">COD order confirm karein</button></form>` : ""}
-${canPack ? html`<form method="post" action="/seller/orders/${o.id as string}/status"><button name="status" value="packed" class="btn big">Pack ho gaya</button></form>` : ""}
-${canDispatch ? html`<form class="card" method="post" action="/seller/orders/${o.id as string}/tracking"><strong>Courier ko diya</strong>
+${canPay ? html`<div class="card"><strong>Payment</strong><p class="muted">Check your bank / UPI app and confirm only after the money has arrived.</p>
+<form method="post" action="/seller/orders/${o.id as string}/payment" class="row"><button name="action" value="confirm" class="btn ok" style="flex:1">Money received, confirm</button><button name="action" value="reject" class="btn er">Nahi aaya</button></form></div>` : ""}
+${canConfirmCod ? html`<form method="post" action="/seller/orders/${o.id as string}/payment"><button name="action" value="confirm" class="btn ok big">Confirm COD order</button></form>` : ""}
+${canPack ? html`<form method="post" action="/seller/orders/${o.id as string}/status"><button name="status" value="packed" class="btn big">Mark as packed</button></form>` : ""}
+${canDispatch ? html`<form class="card" method="post" action="/seller/orders/${o.id as string}/tracking"><strong>Handed to courier</strong>
 <label for="courier">Courier</label><select id="courier" name="courier">${couriers.map((x) => html`<option value="${x.id}">${x.name}</option>`)}</select>
-<label for="tid">Tracking ID</label><input id="tid" name="tracking_id" required maxlength="40"><p><button class="btn big">Dispatch karein</button></p></form>` : ""}
-${st === "dispatched" ? html`<form method="post" action="/seller/orders/${o.id as string}/status"><button name="status" value="delivered" class="btn ok big">Delivered mark karein</button></form>` : ""}
-${!["cancelled", "delivered", "dispatched"].includes(st) ? html`<form method="post" action="/seller/orders/${o.id as string}/status" style="margin-top:12px"><button name="status" value="cancelled" class="btn er big">Order cancel karein</button></form>` : ""}`;
+<label for="tid">Tracking ID</label><input id="tid" name="tracking_id" required maxlength="40"><p><button class="btn big">Dispatch</button></p></form>` : ""}
+${st === "dispatched" ? html`<form method="post" action="/seller/orders/${o.id as string}/status"><button name="status" value="delivered" class="btn ok big">Mark as delivered</button></form>` : ""}
+${!["cancelled", "delivered", "dispatched"].includes(st) ? html`<form method="post" action="/seller/orders/${o.id as string}/status" style="margin-top:12px"><button name="status" value="cancelled" class="btn er big">Cancel order</button></form>` : ""}`;
   return c.html(portal(shop, "orders", "Order", body, flash(c)));
 });
 
@@ -256,21 +256,21 @@ async function event(c: { env: AppBindings["Bindings"] }, orderId: string, shopI
 seller.post("/seller/orders/:id/payment", async (c) => {
   const shop = c.var.shop;
   const o = await ownOrder(c, shop.id, c.req.param("id"));
-  if (!o) return c.redirect(back("/seller/orders", undefined, "Order nahi mila."));
+  if (!o) return c.redirect(back("/seller/orders", undefined, "Order not found."));
   const action = (await c.req.parseBody()).action;
-  if (o.status === "cancelled") return c.redirect(back(`/seller/orders/${o.id}`, undefined, "Cancel order par ye nahi ho sakta."));
+  if (o.status === "cancelled") return c.redirect(back(`/seller/orders/${o.id}`, undefined, "This cannot be done on a cancelled order."));
   if (action === "confirm") {
     await c.env.DB.prepare("UPDATE orders SET payment_status = CASE WHEN payment_method = 'cod' THEN 'cod' ELSE 'confirmed' END, status = CASE WHEN status = 'placed' THEN 'confirmed' ELSE status END WHERE id = ? AND shop_id = ?").bind(o.id, shop.id).run();
     await event(c, o.id as string, shop.id, "payment_confirmed", "seller");
-    await whatsappText(c.env, "91" + (o.buyer_phone as string), `${shop.name}: aapka order #${o.number} confirm ho gaya hai.`);
-    return c.redirect(back(`/seller/orders/${o.id}`, "Order confirm ho gaya."));
+    await whatsappText(c.env, "91" + (o.buyer_phone as string), `${shop.name}: your order #${o.number} is confirmed.`);
+    return c.redirect(back(`/seller/orders/${o.id}`, "Order confirmed."));
   }
   if (action === "reject" && o.payment_method === "upi_manual") {
     await c.env.DB.prepare("UPDATE orders SET payment_status = 'rejected' WHERE id = ? AND shop_id = ?").bind(o.id, shop.id).run();
     await event(c, o.id as string, shop.id, "payment_rejected", "seller");
-    return c.redirect(back(`/seller/orders/${o.id}`, "Payment reject mark kiya. Customer dobara UTR bhej sakta hai."));
+    return c.redirect(back(`/seller/orders/${o.id}`, "Payment marked as rejected. The customer can send the UTR again."));
   }
-  return c.redirect(back(`/seller/orders/${o.id}`, undefined, "Ye action sahi nahi hai."));
+  return c.redirect(back(`/seller/orders/${o.id}`, undefined, "This action is not valid."));
 });
 
 const TRANSITIONS: Record<string, string[]> = { confirmed: ["packed", "cancelled"], placed: ["cancelled"], packed: ["cancelled"], dispatched: ["delivered"] };
@@ -278,32 +278,32 @@ const TRANSITIONS: Record<string, string[]> = { confirmed: ["packed", "cancelled
 seller.post("/seller/orders/:id/status", async (c) => {
   const shop = c.var.shop;
   const o = await ownOrder(c, shop.id, c.req.param("id"));
-  if (!o) return c.redirect(back("/seller/orders", undefined, "Order nahi mila."));
+  if (!o) return c.redirect(back("/seller/orders", undefined, "Order not found."));
   const next = String((await c.req.parseBody()).status ?? "");
-  if (!(TRANSITIONS[o.status as string] ?? []).includes(next)) return c.redirect(back(`/seller/orders/${o.id}`, undefined, "Ye badlav abhi nahi ho sakta."));
+  if (!(TRANSITIONS[o.status as string] ?? []).includes(next)) return c.redirect(back(`/seller/orders/${o.id}`, undefined, "This change is not possible right now."));
   await c.env.DB.prepare("UPDATE orders SET status = ? WHERE id = ? AND shop_id = ?").bind(next, o.id, shop.id).run();
   if (next === "cancelled") {
     const { results } = await c.env.DB.prepare("SELECT product_id, qty FROM order_items WHERE order_id = ? AND shop_id = ?").bind(o.id, shop.id).all<{ product_id: string; qty: number }>();
     for (const it of results) await c.env.DB.prepare("UPDATE products SET stock = stock + ? WHERE id = ? AND shop_id = ?").bind(it.qty, it.product_id, shop.id).run();
   }
   await event(c, o.id as string, shop.id, next, "seller");
-  return c.redirect(back(`/seller/orders/${o.id}`, "Status update ho gaya."));
+  return c.redirect(back(`/seller/orders/${o.id}`, "Status updated."));
 });
 
 seller.post("/seller/orders/:id/tracking", async (c) => {
   const shop = c.var.shop;
   const o = await ownOrder(c, shop.id, c.req.param("id"));
-  if (!o) return c.redirect(back("/seller/orders", undefined, "Order nahi mila."));
-  if (!["confirmed", "packed"].includes(o.status as string) || !["confirmed", "cod"].includes(o.payment_status as string)) return c.redirect(back(`/seller/orders/${o.id}`, undefined, "Pehle payment confirm karein."));
+  if (!o) return c.redirect(back("/seller/orders", undefined, "Order not found."));
+  if (!["confirmed", "packed"].includes(o.status as string) || !["confirmed", "cod"].includes(o.payment_status as string)) return c.redirect(back(`/seller/orders/${o.id}`, undefined, "Confirm the payment first."));
   const form = await c.req.parseBody();
   const tid = String(form.tracking_id ?? "").trim().slice(0, 40);
-  if (!/^[A-Za-z0-9\-\/ ]{4,40}$/.test(tid)) return c.redirect(back(`/seller/orders/${o.id}`, undefined, "Tracking ID sahi daalein."));
+  if (!/^[A-Za-z0-9\-\/ ]{4,40}$/.test(tid)) return c.redirect(back(`/seller/orders/${o.id}`, undefined, "Enter a valid tracking ID."));
   const courier = await c.env.DB.prepare("SELECT name, tracking_url_template FROM couriers WHERE id = ?").bind(String(form.courier ?? "other")).first<{ name: string; tracking_url_template: string }>();
   if (!courier) return c.redirect(back(`/seller/orders/${o.id}`, undefined, "Courier chunein."));
   await c.env.DB.prepare("UPDATE orders SET status='dispatched', courier=?, tracking_id=?, tracking_url=?, dispatched_at=? WHERE id=? AND shop_id=?").bind(courier.name, tid, courier.tracking_url_template || null, new Date().toISOString(), o.id, shop.id).run();
   await event(c, o.id as string, shop.id, "dispatched", `${courier.name} ${tid}`);
-  await whatsappText(c.env, "91" + (o.buyer_phone as string), `${shop.name}: aapka order #${o.number} dispatch ho gaya. Courier: ${courier.name}, ID: ${tid}.`);
-  return c.redirect(back(`/seller/orders/${o.id}`, "Dispatch ho gaya. Customer ko tracking dikh jayegi."));
+  await whatsappText(c.env, "91" + (o.buyer_phone as string), `${shop.name}: your order #${o.number} has been dispatched. Courier: ${courier.name}, ID: ${tid}.`);
+  return c.redirect(back(`/seller/orders/${o.id}`, "Dispatched. The customer can now see the tracking details."));
 });
 
 // ---- Shop settings and theme ----
@@ -322,20 +322,20 @@ const shopSchema = z.object({
 seller.get("/seller/shop", (c) => {
   const shop = c.var.shop;
   const v = (x: string | null) => x ?? "";
-  const body = html`<h1>Meri dukaan</h1><p><a href="/s/${shop.slug}">Dukaan dekhein</a></p>
-<form class="card" method="post" action="/seller/shop"><h2 style="margin-top:0">Contact aur payment</h2>
+  const body = html`<h1>My shop</h1><p><a href="/s/${shop.slug}">View shop</a></p>
+<form class="card" method="post" action="/seller/shop"><h2 style="margin-top:0">Contact and payment</h2>
 <label for="phone">Phone</label><input id="phone" name="phone" inputmode="numeric" maxlength="10" value="${v(shop.phone)}">
 <label for="whatsapp">WhatsApp number</label><input id="whatsapp" name="whatsapp" inputmode="numeric" maxlength="10" value="${v(shop.whatsapp)}">
-<label for="email">Email (naye order ki suchna ke liye)</label><input id="email" name="email" type="email" value="${v(shop.email)}">
-<label for="upi_id">UPI ID (jaise naam@upi)</label><input id="upi_id" name="upi_id" value="${v(shop.upi_id)}">
-<label for="address">Dukaan ka pata</label><textarea id="address" name="address">${v(shop.address)}</textarea>
+<label for="email">Email (for new-order alerts)</label><input id="email" name="email" type="email" value="${v(shop.email)}">
+<label for="upi_id">UPI ID (like name@upi)</label><input id="upi_id" name="upi_id" value="${v(shop.upi_id)}">
+<label for="address">Shop address</label><textarea id="address" name="address">${v(shop.address)}</textarea>
 <label for="maps_url">Google Maps link</label><input id="maps_url" name="maps_url" type="url" value="${v(shop.maps_url)}">
 <label for="instagram">Instagram</label><input id="instagram" name="instagram" value="${v(shop.instagram)}">
 <label for="facebook">Facebook</label><input id="facebook" name="facebook" value="${v(shop.facebook)}">
 <label for="youtube">YouTube</label><input id="youtube" name="youtube" value="${v(shop.youtube)}">
-<p><button class="btn big">Save karein</button></p></form>
-<form class="card" method="post" action="/seller/theme"><h2 style="margin-top:0">Website ka design</h2>${themeForm(shop)}<p><button class="btn big">Design save karein</button></p></form>`;
-  return c.html(portal(shop, "shop", "Meri dukaan", body, flash(c)));
+<p><button class="btn big">Save</button></p></form>
+<form class="card" method="post" action="/seller/theme"><h2 style="margin-top:0">Website design</h2>${themeForm(shop)}<p><button class="btn big">Save design</button></p></form>`;
+  return c.html(portal(shop, "shop", "My shop", body, flash(c)));
 });
 
 seller.post("/seller/shop", async (c) => {
@@ -343,12 +343,12 @@ seller.post("/seller/shop", async (c) => {
   const form = await c.req.parseBody();
   const clean = Object.fromEntries(Object.keys(shopSchema.shape).map((k) => [k, typeof form[k] === "string" ? (form[k] as string).trim() : ""]));
   const parsed = shopSchema.safeParse(clean);
-  if (!parsed.success) return c.redirect(back("/seller/shop", undefined, "Kuch details sahi nahi hain (phone 10 digit, UPI ID naam@bank)."));
+  if (!parsed.success) return c.redirect(back("/seller/shop", undefined, "Some details are not valid (10-digit phone, UPI ID like name@bank)."));
   const d = parsed.data;
   await c.env.DB.prepare("UPDATE shops SET phone=?, whatsapp=?, email=?, upi_id=?, address=?, maps_url=?, instagram=?, facebook=?, youtube=? WHERE id=?")
     .bind(d.phone || null, d.whatsapp || null, d.email || null, d.upi_id || null, d.address || null, d.maps_url || null, d.instagram || null, d.facebook || null, d.youtube || null, shop.id).run();
   await c.env.DB.prepare("INSERT INTO preview_events (id, shop_id, at, type, meta_json) VALUES (?,?,?,?,?)").bind(newId(), shop.id, new Date().toISOString(), "change", '{"what":"settings"}').run();
-  return c.redirect(back("/seller/shop", "Save ho gaya."));
+  return c.redirect(back("/seller/shop", "Saved."));
 });
 
 seller.post("/seller/theme", async (c) => {
@@ -358,13 +358,13 @@ seller.post("/seller/theme", async (c) => {
   const next = sanitizeThemePatch(input, parseTheme(shop.theme_json, shop.name, shop.category));
   await c.env.DB.prepare("UPDATE shops SET theme_json = ? WHERE id = ?").bind(JSON.stringify(next), shop.id).run();
   await c.env.DB.prepare("INSERT INTO preview_events (id, shop_id, at, type, meta_json) VALUES (?,?,?,?,?)").bind(newId(), shop.id, new Date().toISOString(), "change", '{"what":"theme"}').run();
-  return c.redirect(back("/seller/shop", "Design badal gaya. Dukaan kholkar dekhein."));
+  return c.redirect(back("/seller/shop", "Design updated. Open the shop to see it."));
 });
 
 seller.get("/seller/help", (c) => {
   const shop = c.var.shop;
   const body = html`<h1>Help</h1>
-<div class="card"><strong>30 second ke video (jaldi aa rahe hain)</strong><ul><li>Naya product kaise jodein</li><li>Order aaye to kya karein</li><li>Payment confirm kaise karein</li><li>Courier aur tracking ID kaise dalein</li><li>Dukaan ka link share kaise karein</li></ul></div>
-<div class="card"><strong>Koi dikkat ho?</strong><p>Vedhin Technology ko WhatsApp par likhein. Bug ho to screenshot bhej dein.</p></div>`;
+<div class="card"><strong>30-second videos (coming soon)</strong><ul><li>How to add a product</li><li>What to do when an order arrives</li><li>How to confirm a payment</li><li>How to add courier and tracking ID</li><li>Dukaan ka link share kaise karein</li></ul></div>
+<div class="card"><strong>Need help?</strong><p>Message Vedhin Technology on WhatsApp. For a bug, send a screenshot.</p></div>`;
   return c.html(portal(shop, "help", "Help", body));
 });

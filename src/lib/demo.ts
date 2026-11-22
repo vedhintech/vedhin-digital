@@ -6,32 +6,32 @@ interface DemoItem { name: string; category: string; price: number; mrp: number;
 
 const DRESS: DemoItem[] = [
   { name: "Bandhej Cotton Suit", category: "Suits", price: 1299, mrp: 1699, desc: "Soft cotton, bandhej print, 3 piece set.", attrs: { fabric: "Cotton", work: "Bandhej", sizes: "M, L, XL", ready_stock: true } },
-  { name: "Block Print Kurti", category: "Kurtis", price: 599, mrp: 799, desc: "Jaipuri block print, roz pehanne layak.", attrs: { fabric: "Cotton", work: "Block print", sizes: "S, M, L, XL", ready_stock: true } },
+  { name: "Block Print Kurti", category: "Kurtis", price: 599, mrp: 799, desc: "Jaipuri block print, comfortable for everyday wear.", attrs: { fabric: "Cotton", work: "Block print", sizes: "S, M, L, XL", ready_stock: true } },
   { name: "Lehariya Dupatta", category: "Dupatta", price: 449, mrp: 599, desc: "Georgette lehariya dupatta.", attrs: { fabric: "Georgette", work: "Lehariya", ready_stock: true } },
-  { name: "Chanderi Silk Saree", category: "Sarees", price: 2199, mrp: 2799, desc: "Halki chanderi silk, tyohaar ke liye.", attrs: { fabric: "Chanderi", occasion: "Festival", ready_stock: true } },
-  { name: "Embroidered Anarkali", category: "Suits", price: 1899, mrp: 2399, desc: "Pyaari embroidery wala anarkali set.", attrs: { fabric: "Rayon", work: "Embroidery", sizes: "M, L, XL", ready_stock: false } },
-  { name: "Printed Cotton Kurti Set", category: "Kurtis", price: 899, mrp: 1199, desc: "Kurti, palazzo aur dupatta ka set.", attrs: { fabric: "Cotton", sizes: "S, M, L", ready_stock: true } },
-  { name: "Mirror Work Lehenga", category: "Lehenga", price: 3499, mrp: 4499, desc: "Shaadi aur tyohaar ke liye mirror work lehenga.", attrs: { fabric: "Silk blend", work: "Mirror work", occasion: "Wedding", ready_stock: false } },
-  { name: "Leheriya Georgette Saree", category: "Sarees", price: 1599, mrp: 1999, desc: "Rangeen leheriya, halka aur sundar.", attrs: { fabric: "Georgette", work: "Lehariya", ready_stock: true } },
-  { name: "Straight Cut Kurta", category: "Kurtis", price: 699, mrp: 899, desc: "Office aur college ke liye simple kurta.", attrs: { fabric: "Cotton", sizes: "S, M, L, XL", ready_stock: true } },
-  { name: "Phulkari Dupatta", category: "Dupatta", price: 549, mrp: 749, desc: "Haath jaisi phulkari kadhai.", attrs: { fabric: "Cotton", work: "Phulkari", ready_stock: true } },
+  { name: "Chanderi Silk Saree", category: "Sarees", price: 2199, mrp: 2799, desc: "Lightweight chanderi silk for festive occasions.", attrs: { fabric: "Chanderi", occasion: "Festival", ready_stock: true } },
+  { name: "Embroidered Anarkali", category: "Suits", price: 1899, mrp: 2399, desc: "Anarkali set with fine embroidery.", attrs: { fabric: "Rayon", work: "Embroidery", sizes: "M, L, XL", ready_stock: false } },
+  { name: "Printed Cotton Kurti Set", category: "Kurtis", price: 899, mrp: 1199, desc: "Kurti, palazzo and dupatta set.", attrs: { fabric: "Cotton", sizes: "S, M, L", ready_stock: true } },
+  { name: "Mirror Work Lehenga", category: "Lehenga", price: 3499, mrp: 4499, desc: "Mirror work lehenga for weddings and festivals.", attrs: { fabric: "Silk blend", work: "Mirror work", occasion: "Wedding", ready_stock: false } },
+  { name: "Leheriya Georgette Saree", category: "Sarees", price: 1599, mrp: 1999, desc: "Colourful leheriya, light and elegant.", attrs: { fabric: "Georgette", work: "Lehariya", ready_stock: true } },
+  { name: "Straight Cut Kurta", category: "Kurtis", price: 699, mrp: 899, desc: "Simple kurta for office and college.", attrs: { fabric: "Cotton", sizes: "S, M, L, XL", ready_stock: true } },
+  { name: "Phulkari Dupatta", category: "Dupatta", price: 549, mrp: 749, desc: "Hand-style phulkari embroidery.", attrs: { fabric: "Cotton", work: "Phulkari", ready_stock: true } },
 ];
 const JEWEL: DemoItem[] = [
-  { name: "Kundan Necklace Set", category: "Necklace Sets", price: 1499, mrp: 1999, desc: "Kundan necklace, earrings ke saath.", attrs: { material: "Brass", plating: "Gold", stone: "Kundan", anti_tarnish: true, gift_packaging: true, ready_stock: true } },
-  { name: "Lac Bangles (set of 6)", category: "Bangles", price: 599, mrp: 799, desc: "Jodhpur ki lac ki chudiyan.", attrs: { material: "Lac", size: "2.4, 2.6, 2.8", gift_packaging: true, ready_stock: true } },
-  { name: "Meenakari Jhumka", category: "Earrings", price: 449, mrp: 599, desc: "Rangeen meenakari jhumke.", attrs: { material: "Brass", plating: "Gold", anti_tarnish: true, ready_stock: true } },
+  { name: "Kundan Necklace Set", category: "Necklace Sets", price: 1499, mrp: 1999, desc: "Kundan necklace with matching earrings.", attrs: { material: "Brass", plating: "Gold", stone: "Kundan", anti_tarnish: true, gift_packaging: true, ready_stock: true } },
+  { name: "Lac Bangles (set of 6)", category: "Bangles", price: 599, mrp: 799, desc: "Traditional lac bangles from Jodhpur.", attrs: { material: "Lac", size: "2.4, 2.6, 2.8", gift_packaging: true, ready_stock: true } },
+  { name: "Meenakari Jhumka", category: "Earrings", price: 449, mrp: 599, desc: "Colourful meenakari jhumkas.", attrs: { material: "Brass", plating: "Gold", anti_tarnish: true, ready_stock: true } },
   { name: "Oxidised Choker", category: "Necklace Sets", price: 699, mrp: 899, desc: "Oxidised silver look choker.", attrs: { material: "German silver", anti_tarnish: true, ready_stock: true } },
-  { name: "Maang Tikka", category: "Maang Tikka", price: 349, mrp: 499, desc: "Dulhan aur tyohaar dono ke liye.", attrs: { material: "Brass", stone: "Kundan", ready_stock: true } },
-  { name: "Pearl Drop Earrings", category: "Earrings", price: 399, mrp: 549, desc: "Halke motiyon ke earrings.", attrs: { material: "Alloy", stone: "Pearl", anti_tarnish: true, ready_stock: true } },
-  { name: "Bridal Haar Set", category: "Bridal", price: 3299, mrp: 4299, desc: "Shaadi ke liye bhaari haar set.", attrs: { material: "Brass", plating: "Gold", stone: "Kundan", gift_packaging: true, ready_stock: false } },
-  { name: "Silver Look Rings (pack of 3)", category: "Rings", price: 299, mrp: 449, desc: "Roz pehanne ke liye 3 anguthiyan.", attrs: { material: "Alloy", ready_stock: true } },
-  { name: "Temple Jewellery Set", category: "Necklace Sets", price: 1899, mrp: 2399, desc: "Temple design, haath se banaya hua look.", attrs: { material: "Copper", plating: "Gold", anti_tarnish: true, ready_stock: true } },
-  { name: "Thread Bangles Kada", category: "Bangles", price: 499, mrp: 649, desc: "Resham ke dhaage wale kade.", attrs: { material: "Thread", size: "2.4, 2.6", ready_stock: true } },
+  { name: "Maang Tikka", category: "Maang Tikka", price: 349, mrp: 499, desc: "For brides and festive occasions.", attrs: { material: "Brass", stone: "Kundan", ready_stock: true } },
+  { name: "Pearl Drop Earrings", category: "Earrings", price: 399, mrp: 549, desc: "Lightweight pearl earrings.", attrs: { material: "Alloy", stone: "Pearl", anti_tarnish: true, ready_stock: true } },
+  { name: "Bridal Haar Set", category: "Bridal", price: 3299, mrp: 4299, desc: "Statement haar set for weddings.", attrs: { material: "Brass", plating: "Gold", stone: "Kundan", gift_packaging: true, ready_stock: false } },
+  { name: "Silver Look Rings (pack of 3)", category: "Rings", price: 299, mrp: 449, desc: "Three rings for everyday wear.", attrs: { material: "Alloy", ready_stock: true } },
+  { name: "Temple Jewellery Set", category: "Necklace Sets", price: 1899, mrp: 2399, desc: "Temple design with a handcrafted look.", attrs: { material: "Copper", plating: "Gold", anti_tarnish: true, ready_stock: true } },
+  { name: "Thread Bangles Kada", category: "Bangles", price: 499, mrp: 649, desc: "Silk-thread kada bangles.", attrs: { material: "Thread", size: "2.4, 2.6", ready_stock: true } },
 ];
 
 export function slugify(name: string): string {
   const s = name.toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30).replace(/-+$/, "");
-  return s.length >= 3 ? s : "dukaan-" + s;
+  return s.length >= 3 ? s : "shop-" + s;
 }
 
 export interface LeadRow {

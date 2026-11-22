@@ -19,12 +19,12 @@ admin.use("/admin/*", sameOrigin);
 
 const COOKIE = "vd_admin";
 export const STAGES = ["new", "called", "permission", "demo_sent", "editing", "hot", "paid", "stalled", "lost"] as const;
-const STAGE_LABEL: Record<string, string> = { new: "Naya", called: "Call hua", permission: "Permission mila", demo_sent: "Demo bheja", editing: "Changes kar raha", hot: "Hot", paid: "Paid", stalled: "Ruka hua", lost: "Lost" };
+const STAGE_LABEL: Record<string, string> = { new: "New", called: "Called", permission: "Permission", demo_sent: "Demo sent", editing: "Editing", hot: "Hot", paid: "Paid", stalled: "Stalled", lost: "Lost" };
 export const OUTREACH_CAP = 30;
 
 function page(title: string, body: Raw | string, flash?: { m?: string; e?: string }): string {
   const nav = ["", "shops", "outreach", "stats", "bot-usage", "audit"].map((p) => `<a href="/admin${p ? "/" + p : ""}">${{ "": "Leads", shops: "Shops", outreach: "Outreach", stats: "Stats", "bot-usage": "Bot cost", audit: "Audit" }[p]}</a>`).join("");
-  return `<!doctype html><html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} | Vedhin Admin</title><meta name="robots" content="noindex"><style>${CSS}
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} | Vedhin Admin</title><meta name="robots" content="noindex"><style>${CSS}
 .nav{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;background:#fff;border-bottom:1px solid var(--b)}.nav a{padding:8px 14px;border-radius:99px;text-decoration:none;background:var(--bg);color:var(--t);font-weight:600}
 .w{max-width:980px}table{width:100%;border-collapse:collapse}td,th{padding:8px 6px;border-bottom:1px solid var(--b);text-align:left;vertical-align:top;font-size:15px}.inl{display:flex;gap:8px;flex-wrap:wrap;align-items:end}.inl>*{flex:1;min-width:120px}</style></head><body style="padding-bottom:24px">
 <div class="top"><b>Vedhin Admin</b><form method="post" action="/admin/logout"><button class="btn s" style="min-height:40px">Logout</button></form></div><div class="nav">${nav}</div>
@@ -35,14 +35,14 @@ const go = (path: string, m?: string, e?: string) => `${path}${m ? `?m=${encodeU
 
 // ---------- login ----------
 function loginHtml(error?: string) {
-  return `<!doctype html><html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin login</title><meta name="robots" content="noindex"><style>${CSS}</style></head><body><div class="w" style="padding-top:48px"><h1>Vedhin Admin</h1>${error ? `<div class="msg e" role="alert">${esc(error)}</div>` : ""}<form class="card" method="post" action="/admin/login"><label for="pw">Password</label><input id="pw" name="password" type="password" autocomplete="current-password" required><p><button class="btn big">Login</button></p></form></div></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin login</title><meta name="robots" content="noindex"><style>${CSS}</style></head><body><div class="w" style="padding-top:48px"><h1>Vedhin Admin</h1>${error ? `<div class="msg e" role="alert">${esc(error)}</div>` : ""}<form class="card" method="post" action="/admin/login"><label for="pw">Password</label><input id="pw" name="password" type="password" autocomplete="current-password" required><p><button class="btn big">Login</button></p></form></div></body></html>`;
 }
 admin.get("/admin/login", (c) => c.html(loginHtml()));
 admin.post("/admin/login", async (c) => {
-  if (!c.env.ADMIN_PASSWORD) return c.html(loginHtml("ADMIN_PASSWORD abhi set nahi hai (wrangler secret put ADMIN_PASSWORD)."), 503);
-  if (!rateLimit(`adminlogin:${clientIp(c.req.raw)}`, 5, 10 * 60_000)) return c.html(loginHtml("Bahut koshish ho gayi. 10 minute baad try karein."), 429);
+  if (!c.env.ADMIN_PASSWORD) return c.html(loginHtml("ADMIN_PASSWORD is not set yet (run: wrangler secret put ADMIN_PASSWORD)."), 503);
+  if (!rateLimit(`adminlogin:${clientIp(c.req.raw)}`, 5, 10 * 60_000)) return c.html(loginHtml("Too many attempts. Try again in 10 minutes."), 429);
   const pw = String((await c.req.parseBody()).password ?? "");
-  if (!timingSafeEqual(pw, c.env.ADMIN_PASSWORD)) return c.html(loginHtml("Password galat hai."), 401);
+  if (!timingSafeEqual(pw, c.env.ADMIN_PASSWORD)) return c.html(loginHtml("Wrong password."), 401);
   const s = await signSession({ role: "admin", id: "founder", exp: Math.floor(Date.now() / 1000) + 7 * 86400 }, secretOf(c.env));
   setCookie(c, COOKIE, s, { httpOnly: true, secure: c.env.APP_ENV === "production", sameSite: "Strict", path: "/", maxAge: 7 * 86400 });
   return c.redirect("/admin");
@@ -88,8 +88,8 @@ admin.get("/admin", async (c) => {
 <form class="inl" method="get" action="/admin"><input name="q" placeholder="Naam / phone / area" value="${q}"><button class="btn s">Dhundein</button></form>
 <table><thead><tr><th>Dukaan</th><th>Phone</th><th>Rating</th><th>Stage</th><th>Score</th></tr></thead><tbody>
 ${results.map((l) => html`<tr><td><a href="/admin/leads/${l.id}"><strong>${l.business_name}</strong></a><div class="muted">${l.area ?? ""} ${l.category ?? ""}</div></td><td>${l.phone ?? ""}</td><td>${l.rating ?? "-"} (${l.reviews ?? 0})</td><td><span class="chip ${l.stage === "hot" ? "r" : l.stage === "paid" ? "g" : ""}">${STAGE_LABEL[l.stage] ?? l.stage}</span></td><td>${l.score}</td></tr>`)}</tbody></table>
-${results.length ? "" : html`<div class="card">Koi lead nahi. "Naya lead" ya CSV import se jodein.</div>`}
-<h2>CSV import</h2><form class="card" method="post" action="/admin/leads/import"><p class="muted">Pehli line header: business_name, phone, maps_url, instagram_url, category, area, city, rating, reviews, address, source. Phone se duplicate hat jate hain.</p><textarea name="csv" style="min-height:140px" required></textarea><p><button class="btn">Import karein</button></p></form>`;
+${results.length ? "" : html`<div class="card">No leads yet. Add one with "New lead" or import a CSV.</div>`}
+<h2>CSV import</h2><form class="card" method="post" action="/admin/leads/import"><p class="muted">First line is the header: business_name, phone, maps_url, instagram_url, category, area, city, rating, reviews, address, source. Duplicates are removed by phone.</p><textarea name="csv" style="min-height:140px" required></textarea><p><button class="btn">Import</button></p></form>`;
   return c.html(page("Leads", body, fl(c)));
 });
 
@@ -133,12 +133,12 @@ admin.get("/admin/leads/new", (c) => {
 });
 admin.post("/admin/leads", async (c) => {
   const parsed = leadSchema.safeParse(await c.req.parseBody());
-  if (!parsed.success) return c.redirect(go("/admin/leads/new", undefined, "Naam aur phone sahi bharein."));
+  if (!parsed.success) return c.redirect(go("/admin/leads/new", undefined, "Enter a valid name and phone."));
   const r = await insertLead(c.env, parsed.data);
-  if (r === "duplicate") return c.redirect(go("/admin", undefined, "Ye phone pehle se hai."));
+  if (r === "duplicate") return c.redirect(go("/admin", undefined, "This phone number already exists."));
   if (r === "invalid") return c.redirect(go("/admin/leads/new", undefined, "Phone 10 digit ka hona chahiye."));
   await audit(c.env, "lead_add", parsed.data.business_name);
-  return c.redirect(go("/admin", "Lead jud gaya."));
+  return c.redirect(go("/admin", "Lead added."));
 });
 admin.post("/admin/leads/import", async (c) => {
   const text = String((await c.req.parseBody()).csv ?? "").slice(0, 400_000);
@@ -161,7 +161,7 @@ async function getLead(env: AppBindings["Bindings"], id: string) {
 
 admin.get("/admin/leads/:id", async (c) => {
   const l = await getLead(c.env, c.req.param("id"));
-  if (!l) return c.redirect(go("/admin", undefined, "Lead nahi mila."));
+  if (!l) return c.redirect(go("/admin", undefined, "Lead not found."));
   const origin = new URL(c.req.url).origin;
   const shop = l.shop_id ? await c.env.DB.prepare("SELECT slug, status, expires_at FROM shops WHERE id = ?").bind(l.shop_id).first<{ slug: string; status: string; expires_at: string | null }>() : null;
   const { results: consents } = await c.env.DB.prepare("SELECT granted_at, channel, granted_by, note, revoked_at FROM consents WHERE lead_id = ? ORDER BY granted_at DESC").bind(l.id).all<{ granted_at: string; channel: string; granted_by: string; note: string | null; revoked_at: string | null }>();
@@ -171,11 +171,11 @@ admin.get("/admin/leads/:id", async (c) => {
   const body = html`<div class="row"><h1>${l.business_name}</h1><span class="chip ${l.stage === "hot" ? "r" : ""}">${STAGE_LABEL[l.stage] ?? l.stage} | score ${l.score}</span></div>
 <div class="card">${l.owner_name ? html`<div>Malik: ${l.owner_name}</div>` : ""}<div>Phone: <a href="tel:${l.phone ?? ""}">${l.phone ?? "-"}</a> | ${l.area ?? ""} | rating ${l.rating ?? "-"} (${l.reviews ?? 0})</div>
 <div class="muted">${l.address ?? ""}</div>${l.maps_url ? html`<div><a href="${l.maps_url}" rel="noopener" target="_blank">Google Maps</a></div>` : ""}${l.instagram_url ? html`<div><a href="${l.instagram_url}" rel="noopener" target="_blank">Instagram</a></div>` : ""}</div>
-<div class="card"><strong>Demo website</strong>${shop ? html`<p><a href="/s/${shop.slug}" target="_blank">${origin}/s/${shop.slug}</a> (${shop.status}, ${views} views)</p>` : html`<p class="muted">Abhi banayi nahi.</p><form method="post" action="/admin/leads/${l.id}/build-demo"><button class="btn">Demo website banayein</button></form>`}</div>
-<div class="card"><strong>Call ke baad permission</strong><form method="post" action="/admin/leads/${l.id}/consent"><div class="inl"><select name="decision"><option value="yes">Haan, WhatsApp bhej sakte hain</option><option value="no">Nahi, interested nahi</option></select><input name="note" placeholder="Seller ne kya kaha" maxlength="200"><button class="btn">Save</button></div></form>
+<div class="card"><strong>Demo website</strong>${shop ? html`<p><a href="/s/${shop.slug}" target="_blank">${origin}/s/${shop.slug}</a> (${shop.status}, ${views} views)</p>` : html`<p class="muted">Not built yet.</p><form method="post" action="/admin/leads/${l.id}/build-demo"><button class="btn">Build demo website</button></form>`}</div>
+<div class="card"><strong>Permission after the call</strong><form method="post" action="/admin/leads/${l.id}/consent"><div class="inl"><select name="decision"><option value="yes">Yes, WhatsApp is allowed</option><option value="no">No, not interested</option></select><input name="note" placeholder="What the seller said" maxlength="200"><button class="btn">Save</button></div></form>
 ${consents.map((x) => html`<div class="muted">${x.granted_at.slice(0, 16)} | ${x.channel} | ${x.note ?? ""} ${x.revoked_at ? html`<span class="chip r">revoked</span>` : ""}</div>`)}</div>
-<div class="card"><strong>WhatsApp bhejein</strong><p class="muted">Sirf permission ke baad, roz max ${OUTREACH_CAP}, STOP line ke saath.</p><form method="post" action="/admin/leads/${l.id}/send-whatsapp"><button class="btn" ${hasConsent && shop ? "" : "disabled"}>Preview link bhejein</button></form></div>
-<div class="card"><strong>Seller login link</strong><p class="muted">Seller ke paid hone ke baad ya demo dikhane ke liye. WhatsApp par bhejein.</p><form method="post" action="/admin/leads/${l.id}/login-link"><button class="btn s" ${shop && l.phone ? "" : "disabled"}>Naya login link banayein</button></form></div>
+<div class="card"><strong>Send WhatsApp</strong><p class="muted">Only after permission, max ${OUTREACH_CAP} per day, with a STOP line.</p><form method="post" action="/admin/leads/${l.id}/send-whatsapp"><button class="btn" ${hasConsent && shop ? "" : "disabled"}>Send preview link</button></form></div>
+<div class="card"><strong>Seller login link</strong><p class="muted">Use after the seller pays or to show a demo. Send it on WhatsApp.</p><form method="post" action="/admin/leads/${l.id}/login-link"><button class="btn s" ${shop && l.phone ? "" : "disabled"}>Create new login link</button></form></div>
 <div class="card"><strong>Stage aur notes</strong><form method="post" action="/admin/leads/${l.id}/stage"><div class="inl"><select name="stage">${STAGES.map((s) => html`<option value="${s}" ${l.stage === s ? "selected" : ""}>${STAGE_LABEL[s]}</option>`)}</select><button class="btn s">Stage badlein</button></div></form>
 <form method="post" action="/admin/leads/${l.id}/note"><textarea name="notes" maxlength="1000">${l.notes ?? ""}</textarea><p><button class="btn s">Notes save</button></p></form></div>
 ${chats.length ? html`<div class="card"><strong>Chat</strong>${chats.map((m) => html`<div class="muted">${m.at.slice(5, 16)} ${m.direction === "in" ? "Seller" : "Bot"}: ${m.body}</div>`)}</div>` : ""}`;
@@ -184,25 +184,25 @@ ${chats.length ? html`<div class="card"><strong>Chat</strong>${chats.map((m) => 
 
 admin.post("/admin/leads/:id/stage", async (c) => {
   const s = String((await c.req.parseBody()).stage ?? "");
-  if (!(STAGES as readonly string[]).includes(s)) return c.redirect(go(`/admin/leads/${c.req.param("id")}`, undefined, "Stage sahi nahi."));
+  if (!(STAGES as readonly string[]).includes(s)) return c.redirect(go(`/admin/leads/${c.req.param("id")}`, undefined, "Invalid stage."));
   await c.env.DB.prepare("UPDATE leads SET stage = ? WHERE id = ?").bind(s, c.req.param("id")).run();
   await audit(c.env, "lead_stage", c.req.param("id"), { stage: s });
-  return c.redirect(go(`/admin/leads/${c.req.param("id")}`, "Stage badal gaya."));
+  return c.redirect(go(`/admin/leads/${c.req.param("id")}`, "Stage updated."));
 });
 admin.post("/admin/leads/:id/note", async (c) => {
   await c.env.DB.prepare("UPDATE leads SET notes = ? WHERE id = ?").bind(String((await c.req.parseBody()).notes ?? "").slice(0, 1000), c.req.param("id")).run();
-  return c.redirect(go(`/admin/leads/${c.req.param("id")}`, "Notes save ho gaye."));
+  return c.redirect(go(`/admin/leads/${c.req.param("id")}`, "Notes saved."));
 });
 admin.post("/admin/leads/:id/build-demo", async (c) => {
   const l = await getLead(c.env, c.req.param("id"));
-  if (!l) return c.redirect(go("/admin", undefined, "Lead nahi mila."));
+  if (!l) return c.redirect(go("/admin", undefined, "Lead not found."));
   const r = await buildDemoShop(c.env, l);
   await audit(c.env, "demo_built", l.id, { slug: r.slug });
-  return c.redirect(go(`/admin/leads/${l.id}`, "Demo website ban gayi."));
+  return c.redirect(go(`/admin/leads/${l.id}`, "Demo website built."));
 });
 admin.post("/admin/leads/:id/consent", async (c) => {
   const l = await getLead(c.env, c.req.param("id"));
-  if (!l) return c.redirect(go("/admin", undefined, "Lead nahi mila."));
+  if (!l) return c.redirect(go("/admin", undefined, "Lead not found."));
   const form = await c.req.parseBody();
   const note = String(form.note ?? "").slice(0, 200);
   if (form.decision === "yes") {
@@ -214,28 +214,28 @@ admin.post("/admin/leads/:id/consent", async (c) => {
     await c.env.DB.prepare("UPDATE leads SET stage = 'lost', notes = COALESCE(notes,'') || ? WHERE id = ?").bind(`\n[${new Date().toISOString().slice(0, 10)}] ${note}`, l.id).run();
   }
   await audit(c.env, "consent", l.id, { decision: form.decision, note });
-  return c.redirect(go(`/admin/leads/${l.id}`, "Permission record save ho gaya."));
+  return c.redirect(go(`/admin/leads/${l.id}`, "Permission record saved."));
 });
 
 admin.post("/admin/leads/:id/send-whatsapp", async (c) => {
   const l = await getLead(c.env, c.req.param("id"));
   const back = (m?: string, e?: string) => c.redirect(go(`/admin/leads/${c.req.param("id")}`, m, e));
-  if (!l || !l.phone) return back(undefined, "Phone nahi hai.");
+  if (!l || !l.phone) return back(undefined, "No phone number.");
   // Consent is enforced server-side (not only in the UI).
   const consent = await c.env.DB.prepare("SELECT id FROM consents WHERE lead_id = ? AND revoked_at IS NULL").bind(l.id).first();
-  if (!consent) return back(undefined, "Permission record nahi hai. Pehle call karke permission lein.");
+  if (!consent) return back(undefined, "No permission record. Call the lead and get permission first.");
   if (!l.shop_id) return back(undefined, "Pehle demo website banayein.");
   const today = new Date().toISOString().slice(0, 10);
   const sent = (await c.env.DB.prepare("SELECT COUNT(*) n FROM outreach_queue WHERE substr(created_at,1,10) = ? AND status IN ('sent','queued_stub')").bind(today).first<{ n: number }>())?.n ?? 0;
-  if (sent >= OUTREACH_CAP) return back(undefined, `Aaj ki limit (${OUTREACH_CAP}) poori ho gayi. Kal bhejein.`);
+  if (sent >= OUTREACH_CAP) return back(undefined, `Today's limit (${OUTREACH_CAP}) is reached. Send tomorrow.`);
   const shop = await c.env.DB.prepare("SELECT slug, name FROM shops WHERE id = ?").bind(l.shop_id).first<{ slug: string; name: string }>();
-  if (!shop) return back(undefined, "Shop nahi mili.");
+  if (!shop) return back(undefined, "Shop not found.");
   const link = `${new URL(c.req.url).origin}/s/${shop.slug}`;
   const ok = await whatsappTemplate(c.env, "91" + l.phone, c.env.WHATSAPP_TEMPLATE_OPENING ?? "vedhin_preview_link", [l.owner_name || l.business_name, shop.name, link]);
   await c.env.DB.prepare("INSERT INTO outreach_queue (id, lead_id, status, created_at, sent_at) VALUES (?,?,?,?,?)").bind(newId(), l.id, ok ? "sent" : "queued_stub", new Date().toISOString(), ok ? new Date().toISOString() : null).run();
   await c.env.DB.prepare("UPDATE leads SET stage = 'demo_sent' WHERE id = ? AND stage IN ('new','called','permission')").bind(l.id).run();
   await audit(c.env, "whatsapp_outreach", l.id, { sent: ok });
-  return back(ok ? "WhatsApp bhej diya." : `WhatsApp abhi configure nahi hai. Ye link khud bhej dein: ${link}`);
+  return back(ok ? "WhatsApp sent." : `WhatsApp is not configured yet. Send this link yourself: ${link}`);
 });
 
 admin.post("/admin/leads/:id/login-link", async (c) => {
@@ -245,33 +245,33 @@ admin.post("/admin/leads/:id/login-link", async (c) => {
   const token = await createLoginToken(c.env, sid);
   await audit(c.env, "login_link", l.id);
   const link = `${new URL(c.req.url).origin}/seller/login?token=${token}`;
-  return c.html(page("Login link", html`<h1>Seller login link</h1><div class="card"><p>Ye link sirf ek baar chalega (7 din). WhatsApp par bhej dein:</p><p style="word-break:break-all"><strong>${link}</strong></p></div><p><a class="btn s" href="/admin/leads/${l.id}">Wapas</a></p>`));
+  return c.html(page("Login link", html`<h1>Seller login link</h1><div class="card"><p>This link works once and lasts 7 days. Send it on WhatsApp:</p><p style="word-break:break-all"><strong>${link}</strong></p></div><p><a class="btn s" href="/admin/leads/${l.id}">Back</a></p>`));
 });
 
 // ---------- shops ----------
 admin.get("/admin/shops", async (c) => {
   const { results } = await c.env.DB.prepare("SELECT id, slug, name, status, expires_at, plan, paid_at, (SELECT COUNT(*) FROM orders o WHERE o.shop_id = shops.id) AS orders FROM shops ORDER BY created_at DESC LIMIT 200").all<{ id: string; slug: string; name: string; status: string; expires_at: string | null; plan: string; paid_at: string | null; orders: number }>();
-  const body = html`<h1>Shops</h1>${results.length ? "" : html`<div class="card">Abhi koi shop nahi.</div>`}
+  const body = html`<h1>Shops</h1>${results.length ? "" : html`<div class="card">No shops yet.</div>`}
 ${results.map((s) => html`<div class="card"><div class="row"><div><strong><a href="/s/${s.slug}" target="_blank">${s.name}</a></strong><div class="muted">${s.slug} | ${s.orders} orders</div></div><span class="chip ${s.status === "live" ? "g" : s.status === "expired" || s.status === "suspended" ? "r" : ""}">${s.status}</span></div>
 <form method="post" action="/admin/shops/${s.id}" class="inl" style="margin-top:10px"><div><label>Status</label><select name="status">${["preview", "live", "suspended", "expired"].map((x) => html`<option ${s.status === x ? "selected" : ""}>${x}</option>`)}</select></div>
-<div><label>Expiry (khali = kabhi nahi)</label><input type="date" name="expires" value="${s.expires_at?.slice(0, 10) ?? ""}"></div>
+<div><label>Expiry (empty = never)</label><input type="date" name="expires" value="${s.expires_at?.slice(0, 10) ?? ""}"></div>
 <div><label>Plan</label><select name="plan">${["none", "setup", "support"].map((x) => html`<option ${s.plan === x ? "selected" : ""}>${x}</option>`)}</select></div><button class="btn s">Save</button></form>
-<form method="post" action="/admin/shops/${s.id}/extend" class="inl" style="margin-top:8px"><button class="btn s" name="days" value="7">+7 din</button><button class="btn s" name="days" value="30">+30 din</button><button class="btn ok" formaction="/admin/shops/${s.id}/paid">Paid mark karein (live)</button></form></div>`)}`;
+<form method="post" action="/admin/shops/${s.id}/extend" class="inl" style="margin-top:8px"><button class="btn s" name="days" value="7">+7 days</button><button class="btn s" name="days" value="30">+30 days</button><button class="btn ok" formaction="/admin/shops/${s.id}/paid">Mark as paid (go live)</button></form></div>`)}`;
   return c.html(page("Shops", body, fl(c)));
 });
 admin.post("/admin/shops/:id", async (c) => {
   const f = await c.req.parseBody();
   const status = String(f.status), plan = String(f.plan);
   const exp = String(f.expires ?? "");
-  if (!["preview", "live", "suspended", "expired"].includes(status) || !["none", "setup", "support"].includes(plan)) return c.redirect(go("/admin/shops", undefined, "Value sahi nahi."));
-  if (exp && !/^\d{4}-\d{2}-\d{2}$/.test(exp)) return c.redirect(go("/admin/shops", undefined, "Date sahi nahi."));
+  if (!["preview", "live", "suspended", "expired"].includes(status) || !["none", "setup", "support"].includes(plan)) return c.redirect(go("/admin/shops", undefined, "Invalid value."));
+  if (exp && !/^\d{4}-\d{2}-\d{2}$/.test(exp)) return c.redirect(go("/admin/shops", undefined, "Invalid date."));
   await c.env.DB.prepare("UPDATE shops SET status = ?, plan = ?, expires_at = ? WHERE id = ?").bind(status, plan, exp ? `${exp}T23:59:59Z` : null, c.req.param("id")).run();
   await audit(c.env, "shop_update", c.req.param("id"), { status, plan, exp });
-  return c.redirect(go("/admin/shops", "Shop update ho gayi."));
+  return c.redirect(go("/admin/shops", "Shop updated."));
 });
 admin.post("/admin/shops/:id/extend", async (c) => {
   const days = Number((await c.req.parseBody()).days);
-  if (![7, 30].includes(days)) return c.redirect(go("/admin/shops", undefined, "Value sahi nahi."));
+  if (![7, 30].includes(days)) return c.redirect(go("/admin/shops", undefined, "Invalid value."));
   const s = await c.env.DB.prepare("SELECT expires_at FROM shops WHERE id = ?").bind(c.req.param("id")).first<{ expires_at: string | null }>();
   const base = s?.expires_at && new Date(s.expires_at).getTime() > Date.now() ? new Date(s.expires_at).getTime() : Date.now();
   await c.env.DB.prepare("UPDATE shops SET expires_at = ?, status = CASE WHEN status = 'expired' THEN 'preview' ELSE status END WHERE id = ?").bind(new Date(base + days * 86400_000).toISOString(), c.req.param("id")).run();
@@ -283,7 +283,7 @@ admin.post("/admin/shops/:id/paid", async (c) => {
   await c.env.DB.prepare("UPDATE shops SET status = 'live', plan = CASE WHEN plan = 'none' THEN 'setup' ELSE plan END, expires_at = NULL, paid_at = ? WHERE id = ?").bind(new Date().toISOString(), id).run();
   await c.env.DB.prepare("UPDATE leads SET stage = 'paid' WHERE shop_id = ?").bind(id).run();
   await audit(c.env, "shop_paid", id);
-  return c.redirect(go("/admin/shops", "Shop live ho gayi. Seller ko login link do."));
+  return c.redirect(go("/admin/shops", "Shop is live. Send the seller a login link."));
 });
 
 // ---------- outreach, stats, bot cost, audit ----------
@@ -303,14 +303,14 @@ admin.get("/admin/stats", async (c) => {
     one("SELECT COUNT(*) n FROM shops WHERE plan = 'support'"), one("SELECT COUNT(*) n FROM consents WHERE revoked_at IS NOT NULL"),
   ]);
   const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) + "%" : "-");
-  const body = html`<h1>Stats</h1><div class="stats"><div class="card"><strong>${leads}</strong>Total leads</div><div class="card"><strong>${called}</strong>Contact hue</div><div class="card"><strong>${perm}</strong>Permission mili (${pct(perm, called)})</div><div class="card"><strong>${demos}</strong>Demo bane</div><div class="card"><strong>${hot}</strong>Hot abhi</div><div class="card"><strong>${paid}</strong>Paid (${pct(paid, demos)} of demos)</div></div>
+  const body = html`<h1>Stats</h1><div class="stats"><div class="card"><strong>${leads}</strong>Total leads</div><div class="card"><strong>${called}</strong>Contacted</div><div class="card"><strong>${perm}</strong>Permission given (${pct(perm, called)})</div><div class="card"><strong>${demos}</strong>Demos built</div><div class="card"><strong>${hot}</strong>Hot now</div><div class="card"><strong>${paid}</strong>Paid (${pct(paid, demos)} of demos)</div></div>
 <div class="card"><div>Setup se kamai: <strong>${rupees(paid * 1999)}</strong></div><div>Monthly recurring: <strong>${rupees(support * 499)}</strong> (${support} support plans)</div><div class="muted">Opt-out / permission wapas: ${optouts}</div></div>`;
   return c.html(page("Stats", body));
 });
 
 admin.get("/admin/bot-usage", async (c) => {
   const { results } = await c.env.DB.prepare("SELECT s.name, SUM(b.ai_calls) calls, SUM(b.input_tokens) tin, SUM(b.output_tokens) tout, SUM(b.est_cost_paise) cost FROM bot_usage b JOIN shops s ON s.id = b.shop_id WHERE b.day >= date('now','-30 day') GROUP BY b.shop_id ORDER BY calls DESC").all<{ name: string; calls: number; tin: number; tout: number; cost: number }>();
-  return c.html(page("Bot cost", html`<h1>Bot cost (30 din)</h1><table><thead><tr><th>Shop</th><th>AI calls</th><th>Tokens in/out</th><th>Kharcha (approx)</th></tr></thead><tbody>${results.map((r) => html`<tr><td>${r.name}</td><td>${r.calls}</td><td>${r.tin}/${r.tout}</td><td>₹${(r.cost / 100).toFixed(2)}</td></tr>`)}</tbody></table>${results.length ? "" : html`<div class="card">Abhi AI ka koi use nahi hua.</div>`}`));
+  return c.html(page("Bot cost", html`<h1>Bot cost (30 days)</h1><table><thead><tr><th>Shop</th><th>AI calls</th><th>Tokens in/out</th><th>Cost (approx)</th></tr></thead><tbody>${results.map((r) => html`<tr><td>${r.name}</td><td>${r.calls}</td><td>${r.tin}/${r.tout}</td><td>₹${(r.cost / 100).toFixed(2)}</td></tr>`)}</tbody></table>${results.length ? "" : html`<div class="card">No AI usage yet.</div>`}`));
 });
 
 admin.get("/admin/audit", async (c) => {

@@ -47,7 +47,7 @@ export async function scoreLeads(env: Env, now = new Date()): Promise<{ scored: 
     if (score >= HOT_THRESHOLD && l.stage !== "hot") {
       await env.DB.prepare("UPDATE leads SET stage = 'hot' WHERE id = ?").bind(l.id).run();
       const last = await env.DB.prepare("SELECT body FROM chat_messages WHERE shop_id = ? AND direction = 'in' ORDER BY at DESC LIMIT 1").bind(l.shop_id).first<{ body: string }>();
-      const reasons = [sig.askedPrice && "price/payment poocha", sig.callRequested && "call maanga", sig.inboundMessages >= 7 && `${sig.inboundMessages} messages`, sig.views >= 3 && `${sig.views} baar website dekhi`, sig.uploadedAssets && "photo/changes kiye"].filter(Boolean).join(", ");
+      const reasons = [sig.askedPrice && "asked about price/payment", sig.callRequested && "asked for a call", sig.inboundMessages >= 7 && `${sig.inboundMessages} messages`, sig.views >= 3 && `viewed the site ${sig.views} times`, sig.uploadedAssets && "uploaded photos / made changes"].filter(Boolean).join(", ");
       await telegram(env, `HOT: ${l.business_name} (${l.area ?? ""}) score ${score}. ${reasons}.${last ? ` Last msg: "${last.body.slice(0, 80)}".` : ""} Phone: ${l.phone ?? "-"}`);
       hot++;
     } else if (score < HOT_THRESHOLD - 3 && l.stage === "hot") {

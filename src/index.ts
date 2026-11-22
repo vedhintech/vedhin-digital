@@ -16,7 +16,7 @@ app.get("/health", async (c) => {
   return c.json({ status: "ok", db: row?.ok === 1, env: c.env.APP_ENV, time: new Date().toISOString() });
 });
 
-app.get("/", (c) => c.json({ name: "Vedhin Digital", message: "Platform chal raha hai." }));
+app.get("/", (c) => c.json({ name: "Vedhin Digital", message: "Platform is running." }));
 
 app.use("*", securityHeaders);
 app.route("/", storefront);
