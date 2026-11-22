@@ -132,7 +132,7 @@ const ICON_PATHS: Record<string, string> = {
 
 /** Rule-based SVG logo (no AI cost). Returns an inline <svg> string; text is XML-escaped. */
 export function logoSvg(logo: Theme["logo"], color: string, accent: string, height = 44): string {
-  const text = (logo.text || "Dukaan").replace(/[<>&"']/g, "");
+  const text = (logo.text || "Shop").replace(/[<>&"']/g, "");
   const icon = ICON_PATHS[logo.icon] ?? ICON_PATHS.lotus!;
   const initials = text.split(/\s+/).map((w) => w[0] ?? "").join("").slice(0, 2).toUpperCase();
   if (logo.layout === "monogram") {

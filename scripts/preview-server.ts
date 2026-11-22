@@ -22,6 +22,18 @@ async function seed() {
       console.log(`seller login: http://localhost:8799/seller/login?token=${await createLoginToken(env, sid)}`);
     }
   }
+  // Extra sample leads so the founder panel looks lived-in in the local preview.
+  const sample: [string, string, string, string, string, number][] = [
+    ["Mehendi Rang Boutique", "ladies_dress", "9833000001", "Sardarpura", "hot", 9], ["Gulabo Kurti House", "ladies_dress", "9833000002", "Paota", "hot", 7],
+    ["Raj Payal Jewels", "jewellery", "9833000003", "Clock Tower", "editing", 5], ["Navrang Fashion", "ladies_dress", "9833000004", "Shastri Nagar", "demo_sent", 2],
+    ["Heera Panna Ornaments", "jewellery", "9833000005", "Jaipur, MI Road", "permission", 0], ["Kesar Suits", "ladies_dress", "9833000006", "Ratanada", "called", 0],
+    ["Madhuri Sarees", "ladies_dress", "9833000007", "Chopasni", "stalled", 0], ["Anaar Collection", "ladies_dress", "9833000008", "Sojati Gate", "lost", 0],
+  ];
+  const now = new Date().toISOString();
+  for (const [n, cat, ph, area, stage, score] of sample)
+    m.raw.prepare("INSERT INTO leads (id, created_at, business_name, phone, category, area, city, stage, score, rating, reviews) VALUES (?,?,?,?,?,?,?,?,?,?,?)").run(newId(), now, n, ph, cat, area, "Jodhpur", stage, score, 4.3, 120);
+  m.raw.prepare("INSERT INTO audit_log (id, at, actor, action, target, meta_json) VALUES (?,?,?,?,?,?)").run(newId(), now, "founder", "lead_import", "csv", "{}");
+  m.raw.prepare("UPDATE shops SET expires_at = ? WHERE status = 'preview'").run(new Date(Date.now() + 3 * 86400_000).toISOString());
   console.log("admin: http://localhost:8799/admin (password: admin)");
 }
 
