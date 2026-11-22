@@ -3,7 +3,7 @@ import type { Env, Shop } from "../types";
 import { newId } from "./id";
 import { PRICING } from "../i18n/hinglish";
 import { BOT_DEFAULT, LANG_NAMES, catalogFor, detectLang, devanagariToRules, hasCatalog, type BotCatalog, type BotLang } from "../i18n/bot";
-import { telegram } from "./notify";
+import { telegram, whatsappText } from "./notify";
 import { fetchMedia, type Incoming } from "./wa";
 import { getAiProvider } from "../ai/provider";
 import { parseTheme, sanitizeThemePatch, PALETTES } from "./theme";
@@ -153,7 +153,8 @@ async function localize(env: Env, shop: Shop | undefined, lang: BotLang, replies
 }
 
 /** Main entry. Returns replies to send; all side effects (DB, alerts) happen here. The bot answers in the seller's own language. */
-export async function handleIncoming(env: Env, msg: Incoming, baseUrl: string): Promise<string[]> {
+export async function handleIncoming(env: Env, msg0: Incoming, baseUrl: string): Promise<string[]> {
+  let msg = msg0;
   const phone = msg.from.replace(/\D/g, "").slice(-10);
   const kind = msg.type === "text" ? "text" : msg.type;
 
@@ -171,7 +172,7 @@ export async function handleIncoming(env: Env, msg: Incoming, baseUrl: string): 
   const shop = ctx.shop!;
   const st = await loadState(env, phone);
   if (msg.type === "text") st.lang = detectLang(msg.text) ?? st.lang;
-  const B = catalogFor(st.lang);
+  let B = catalogFor(st.lang);
   // Hindi (Devanagari) keywords are mapped to the rule commands; other scripts are translated to English by AI below.
   let text = normalize(devanagariToRules(msg.text));
 
@@ -198,6 +199,17 @@ export async function handleIncoming(env: Env, msg: Incoming, baseUrl: string): 
   if (ctx.leadId) {
     const has = await env.DB.prepare("SELECT 1 x FROM consents WHERE lead_id = ? AND revoked_at IS NULL").bind(ctx.leadId).first();
     if (!has) await env.DB.prepare("INSERT INTO consents (id, lead_id, phone, channel, granted_at, granted_by, note) VALUES (?,?,?,?,?,?,?)").bind(newId(), ctx.leadId, phone, "whatsapp_optin", nowIso(), "seller", "user-initiated message").run();
+  }
+
+  // Voice notes: turn speech into text (AI, budgeted, seller's own voice only), then handle it like a typed message.
+  if (msg.type === "audio") {
+    const t = await transcribeVoice(env, shop, msg.mediaId);
+    if (t) {
+      msg = { ...msg, type: "text", text: t, fromVoice: true };
+      st.lang = detectLang(t) ?? st.lang;
+      B = catalogFor(st.lang);
+      text = normalize(devanagariToRules(t));
+    }
   }
 
   // Other Indian scripts: understand by translating the seller's own text to English (AI, budgeted). Only seller text is sent.
@@ -294,6 +306,10 @@ async function route(env: Env, ctx: Ctx, st: State, msg: Incoming, text: string,
     return [bot.designDone(link)];
   }
 
+  // --- orders by chat (list, confirm payment, dispatch) ---
+  const oc = await orderCommands(env, ctx, msg, text, bot, baseUrl);
+  if (oc) return oc;
+
   // --- price / stock / sold out ---
   const so = text.match(/^(?:sold ?out|khatam)\s+(.+)$/) ?? text.match(/^(.+?)\s+(?:sold ?out|khatam)$/);
   if (so) return stockOp(env, shop, so[1]!, { soldOut: true }, bot);
@@ -360,6 +376,62 @@ async function stockOp(env: Env, shop: Shop, q: string, op: { price?: number; st
   }
   await env.DB.prepare("UPDATE products SET sold_out = 1 WHERE id = ? AND shop_id = ?").bind(p.id, shop.id).run();
   return [bot.soldOut(p.name)];
+}
+
+async function transcribeVoice(env: Env, shop: Shop, mediaId?: string): Promise<string | null> {
+  if (!mediaId || !(await aiBudget(env, shop))) return null;
+  const media = await fetchMedia(env, mediaId, "audio");
+  if (!media) return null;
+  try {
+    const { text, usage } = await getAiProvider(env).transcribe({ mime: media.mime, base64: toBase64(media.bytes) });
+    await recordAi(env, shop.id, usage);
+    return text ? text.slice(0, 500) : null;
+  } catch {
+    return null;
+  }
+}
+
+const COURIER_ALIASES: [RegExp, string][] = [[/^dtdc$/, "dtdc"], [/^maruti/, "maruti"], [/^(india ?post|post|speed ?post)$/, "indiapost"], [/^delhivery$/, "delhivery"], [/^(other|any|local)$/, "other"]];
+
+/** Order commands by chat: "orders", "confirm 12", "dispatch 12 dtdc ABC123". Rules only, zero AI cost. Returns null when the text is not an order command. */
+async function orderCommands(env: Env, ctx: Ctx, msg: Incoming, text: string, bot: BotCatalog, baseUrl: string): Promise<string[] | null> {
+  const isList = /^(orders?|order list|mere orders?|my orders?)$/.test(text);
+  const cf = text.match(/^(?:confirm|paid|received|payment ok)\s+#?(\d{1,6})$/);
+  const dp = text.match(/^dispatch\s+#?(\d{1,6})(?:\s+(\S+)\s+([a-z0-9\-/]{4,40}))?$/i);
+  if (!isList && !cf && !dp) return null;
+  const shop = ctx.shop!;
+  if (shop.status === "preview" || ctx.kind !== "seller") return [bot.ordersPreview];
+  if (isList) {
+    const { results } = await env.DB.prepare("SELECT number, buyer_name, total, status, payment_status FROM orders WHERE shop_id = ? AND status NOT IN ('cancelled','delivered') ORDER BY number DESC LIMIT 8").bind(shop.id).all<{ number: number; buyer_name: string; total: number; status: string; payment_status: string }>();
+    if (!results.length) return [bot.orderNone];
+    const lines = results.map((o) => `#${o.number} ${o.buyer_name.slice(0, 20)} ₹${o.total} (${o.payment_status === "proof_uploaded" ? bot.orderState.pay : o.status === "dispatched" ? bot.orderState.ship : bot.orderState.pack})`);
+    const token = await createLoginToken(env, ctx.sellerId!);
+    return [bot.orderList(lines, `${baseUrl}/seller/login?token=${token}`)];
+  }
+  // Changing an order from a voice note is risky (misheard numbers): ask the seller to type it.
+  if (msg.fromVoice) return [bot.typeIt];
+  const num = Number((cf ?? dp)![1]);
+  const o = await env.DB.prepare("SELECT id, number, status, payment_status, payment_method, buyer_phone FROM orders WHERE shop_id = ? AND number = ?").bind(shop.id, num).first<{ id: string; number: number; status: string; payment_status: string; payment_method: string; buyer_phone: string }>();
+  if (!o) return [bot.orderNotFound(num)];
+  const ev = (type: string, detail: string) => env.DB.prepare("INSERT INTO order_events (id, order_id, shop_id, at, type, detail) VALUES (?,?,?,?,?,?)").bind(newId(), o.id, shop.id, nowIso(), type, detail).run();
+  if (cf) {
+    if (o.status === "cancelled" || o.status === "delivered") return [bot.orderNotFound(num)];
+    await env.DB.prepare("UPDATE orders SET payment_status = CASE WHEN payment_method = 'cod' THEN 'cod' ELSE 'confirmed' END, status = CASE WHEN status = 'placed' THEN 'confirmed' ELSE status END WHERE id = ? AND shop_id = ?").bind(o.id, shop.id).run();
+    await ev("payment_confirmed", "seller (chat)");
+    await whatsappText(env, "91" + o.buyer_phone, `${shop.name}: your order #${o.number} is confirmed.`);
+    return [bot.orderConfirmed(num)];
+  }
+  if (!dp![2] || !dp![3]) return [bot.dispatchHelp];
+  const cid = COURIER_ALIASES.find(([re]) => re.test(dp![2]!.toLowerCase()))?.[1];
+  if (!cid) return [bot.dispatchHelp];
+  if (!["confirmed", "packed"].includes(o.status) || !["confirmed", "cod"].includes(o.payment_status)) return [bot.orderNeedPay(num)];
+  const courier = await env.DB.prepare("SELECT name, tracking_url_template FROM couriers WHERE id = ?").bind(cid).first<{ name: string; tracking_url_template: string }>();
+  if (!courier) return [bot.dispatchHelp];
+  const tid = dp![3]!.toUpperCase();
+  await env.DB.prepare("UPDATE orders SET status='dispatched', courier=?, tracking_id=?, tracking_url=?, dispatched_at=? WHERE id=? AND shop_id=? AND status IN ('confirmed','packed')").bind(courier.name, tid, courier.tracking_url_template || null, nowIso(), o.id, shop.id).run();
+  await ev("dispatched", `${courier.name} ${tid} (chat)`);
+  await whatsappText(env, "91" + o.buyer_phone, `${shop.name}: your order #${o.number} has been dispatched. Courier: ${courier.name}, ID: ${tid}.`);
+  return [bot.orderDispatched(num, courier.name, tid)];
 }
 
 async function menuChoice(env: Env, ctx: Ctx, st: State, n: number, baseUrl: string, bot: BotCatalog): Promise<string[]> {

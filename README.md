@@ -44,7 +44,7 @@ Panel: import leads, "Demo website banayein", call the seller, record permission
 
 ## Known limits (honest list)
 - Photos are stored as uploaded (type checked by real file bytes, max 5 MB). WebP conversion needs Cloudflare Images (paid), so it is skipped.
-- Bot cannot dispatch orders or read voice notes yet (orders go through the portal; voice needs a speech-to-text provider).
+- Voice notes are transcribed with Gemini (free tier, needs `AI_PROVIDER=gemini` and `GEMINI_API_KEY`). Order-changing commands (confirm, dispatch) must be typed, because voice can mishear numbers.
 - No QR image for UPI (UPI app link + UPI ID are shown; seller QR upload is a later add-on).
 - Razorpay/Cashfree auto-payment, live courier tracking API, comment-to-DM and the marketplace are Phase 2 (see `docs/01-PRD.md`).
 - Free-tier limits and WhatsApp/Gemini rates change: re-check before launch.

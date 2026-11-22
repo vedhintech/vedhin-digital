@@ -19,6 +19,8 @@ export interface AiProvider {
   classifyIntent(text: string): Promise<{ intent: string; usage: UsageInfo }>;
   /** Translate short bot text. Returns null when no real AI is configured (caller falls back to English). */
   translate(text: string, target: string): Promise<{ text: string | null; usage: UsageInfo }>;
+  /** Speech to text for a seller voice note (Hindi, English, Hinglish, other Indian languages). Null when unavailable. */
+  transcribe(audio: { mime: string; base64: string }): Promise<{ text: string | null; usage: UsageInfo }>;
 }
 
 export class StubAiProvider implements AiProvider {
@@ -33,6 +35,9 @@ export class StubAiProvider implements AiProvider {
     return { intent: text.trim() ? "unknown" : "empty", usage: { inputTokens: 0, outputTokens: 0 } };
   }
   async translate() {
+    return { text: null, usage: { inputTokens: 0, outputTokens: 0 } };
+  }
+  async transcribe() {
     return { text: null, usage: { inputTokens: 0, outputTokens: 0 } };
   }
 }

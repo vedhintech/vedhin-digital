@@ -34,6 +34,17 @@ export class GeminiProvider implements AiProvider {
     return { intent, usage };
   }
 
+  /** Only the seller's own voice note is sent: never buyer data. */
+  async transcribe(audio: { mime: string; base64: string }) {
+    const { text: out, usage } = await this.call([
+      { text: 'Transcribe this short voice note exactly as spoken. The speaker may use Hindi, English, Hinglish or another Indian language. Keep numbers as digits. Respond only as JSON: {"text": "<transcript>"}' },
+      { inline_data: { mime_type: audio.mime.split(";")[0], data: audio.base64 } },
+    ]);
+    let t: string | null = null;
+    try { t = String((JSON.parse(out) as { text?: string }).text ?? "").trim() || null; } catch { /* no transcript */ }
+    return { text: t, usage };
+  }
+
   /** Only fixed bot sentences or the seller's own message text are sent: never buyer data. */
   async translate(text: string, target: string) {
     const { text: out, usage } = await this.call([{ text: `Translate into ${target}. Keep numbers, links, ₹ amounts, bullet points and line breaks unchanged. Respond only as JSON: {"text": "<translation>"}\n\n${text.slice(0, 1500)}` }]);
