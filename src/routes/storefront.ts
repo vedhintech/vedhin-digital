@@ -1,3 +1,4 @@
+import type { Context } from "hono";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppBindings } from "../types";
@@ -11,11 +12,12 @@ import { rateLimit, clientIp } from "../lib/rate";
 import { email, whatsappText } from "../lib/notify";
 import { PALETTES, defaultTheme, placeholderSvg } from "../lib/theme";
 import { safeUrl } from "../lib/html";
+import { langMw, tt } from "../middleware/lang";
 import { homePage, productPage, cartPage, checkoutPage, orderPage, trackPage, privacyPage, manifestFor, iconSvg, SW_JS, type ProductRow, type OrderView } from "../views/storefront";
 
 export const storefront = new Hono<AppBindings>();
 
-storefront.use("/s/:slug/*", resolveShop);
+storefront.use("/s/:slug/*", langMw, resolveShop);
 storefront.use("/s/:slug/api/*", sameOrigin);
 
 const PRODUCT_COLS =
@@ -63,7 +65,7 @@ storefront.get("/s/:slug/api/products/:id", async (c) => {
   const product = await c.env.DB.prepare(`SELECT ${PRODUCT_COLS} FROM products p WHERE p.id = ? AND p.shop_id = ? AND p.active = 1`)
     .bind(c.req.param("id"), shopId)
     .first();
-  if (!product) return c.json({ error: t.productNotFound }, 404);
+  if (!product) return c.json({ error: tt(c, "errProductNotFound") }, 404);
   const { results: images } = await c.env.DB.prepare("SELECT url, sort, is_stock FROM product_images WHERE product_id = ? AND shop_id = ? ORDER BY sort")
     .bind(c.req.param("id"), shopId)
     .all();
@@ -73,13 +75,13 @@ storefront.get("/s/:slug/api/products/:id", async (c) => {
 // ---------- Cart pricing (server is the source of truth for prices) ----------
 const itemsSchema = z.array(z.object({ id: z.string().min(1).max(40), qty: z.number().int().min(1).max(10) })).min(1).max(20);
 
-async function priceLines(c: { env: AppBindings["Bindings"] }, shopId: string, items: z.infer<typeof itemsSchema>) {
+async function priceLines(c: Context<AppBindings>, shopId: string, items: z.infer<typeof itemsSchema>) {
   const lines = [];
   let subtotal = 0;
   for (const it of items) {
     const p = await c.env.DB.prepare(`SELECT ${PRODUCT_COLS} FROM products p WHERE p.id = ? AND p.shop_id = ? AND p.active = 1`).bind(it.id, shopId).first<ProductRow>();
     if (!p) {
-      lines.push({ id: it.id, name: "Product hata diya gaya", price: 0, qty: it.qty, image: null, available: false });
+      lines.push({ id: it.id, name: tt(c, "productRemoved"), price: 0, qty: it.qty, image: null, available: false });
       continue;
     }
     const available = p.sold_out !== 1 && p.stock >= it.qty;
@@ -91,7 +93,7 @@ async function priceLines(c: { env: AppBindings["Bindings"] }, shopId: string, i
 
 storefront.post("/s/:slug/api/cart/price", async (c) => {
   const body = z.object({ items: itemsSchema }).safeParse(await c.req.json().catch(() => null));
-  if (!body.success) return c.json({ error: t.invalidInput }, 400);
+  if (!body.success) return c.json({ error: tt(c, "errInvalid") }, 400);
   return c.json(await priceLines(c, c.var.shop.id, body.data.items));
 });
 
@@ -118,19 +120,19 @@ export async function notifySeller(env: AppBindings["Bindings"], shop: { name: s
 
 storefront.post("/s/:slug/api/orders", async (c) => {
   const shop = c.var.shop;
-  if (shop.status === "preview") return c.json({ error: "Ye preview hai. Order live hone ke baad hi liye ja sakte hain." }, 403);
-  if (!rateLimit(`order:${clientIp(c.req.raw)}`, 8, 10 * 60_000)) return c.json({ error: "Thodi der baad try karein." }, 429);
+  if (shop.status === "preview") return c.json({ error: tt(c, "errPreviewOrders") }, 403);
+  if (!rateLimit(`order:${clientIp(c.req.raw)}`, 8, 10 * 60_000)) return c.json({ error: tt(c, "errTooMany") }, 429);
   const parsed = orderSchema.safeParse(await c.req.json().catch(() => null));
-  if (!parsed.success) return c.json({ error: t.invalidInput }, 400);
+  if (!parsed.success) return c.json({ error: tt(c, "errInvalid") }, 400);
   const d = parsed.data;
-  if (d.payment_method === "upi_manual" && !shop.upi_id) return c.json({ error: "Is dukaan par UPI abhi chalu nahi hai. Cash on delivery chunein." }, 400);
+  if (d.payment_method === "upi_manual" && !shop.upi_id) return c.json({ error: tt(c, "errNoUpi") }, 400);
 
   // Merge duplicate lines, then price from DB.
   const merged = new Map<string, number>();
   for (const it of d.items) merged.set(it.id, Math.min(10, (merged.get(it.id) ?? 0) + it.qty));
   const items = [...merged].map(([id, qty]) => ({ id, qty }));
   const { lines, subtotal } = await priceLines(c, shop.id, items);
-  if (lines.some((l) => !l.available)) return c.json({ error: "Kuch products ab available nahi hain. Cart check karein." }, 409);
+  if (lines.some((l) => !l.available)) return c.json({ error: tt(c, "errUnavailable") }, 409);
 
   // Reserve stock atomically per line; roll back on any failure.
   const reserved: { id: string; qty: number }[] = [];
@@ -138,7 +140,7 @@ storefront.post("/s/:slug/api/orders", async (c) => {
     const r = (await c.env.DB.prepare("UPDATE products SET stock = stock - ? WHERE id = ? AND shop_id = ? AND stock >= ?").bind(l.qty, l.id, shop.id, l.qty).run()) as { meta?: { changes?: number } };
     if ((r.meta?.changes ?? 0) < 1) {
       for (const x of reserved) await c.env.DB.prepare("UPDATE products SET stock = stock + ? WHERE id = ? AND shop_id = ?").bind(x.qty, x.id, shop.id).run();
-      return c.json({ error: "Stock khatam ho gaya. Cart check karein." }, 409);
+      return c.json({ error: tt(c, "errStock") }, 409);
     }
     reserved.push({ id: l.id, qty: l.qty });
   }
@@ -164,7 +166,7 @@ storefront.post("/s/:slug/api/orders", async (c) => {
   }
   if (!number) {
     for (const x of reserved) await c.env.DB.prepare("UPDATE products SET stock = stock + ? WHERE id = ? AND shop_id = ?").bind(x.qty, x.id, shop.id).run();
-    return c.json({ error: t.somethingWrong }, 500);
+    return c.json({ error: tt(c, "errSomething") }, 500);
   }
   for (const l of lines) {
     await c.env.DB.prepare("INSERT INTO order_items (id, order_id, shop_id, product_id, name, qty, price) VALUES (?,?,?,?,?,?,?)").bind(newId(), orderId, shop.id, l.id, l.name, l.qty, l.price).run();
@@ -187,13 +189,13 @@ async function loadOrder(c: { env: AppBindings["Bindings"] }, shopId: string, nu
 
 storefront.post("/s/:slug/api/orders/:number/proof", async (c) => {
   const shop = c.var.shop;
-  if (!rateLimit(`proof:${clientIp(c.req.raw)}`, 10, 10 * 60_000)) return c.json({ error: "Thodi der baad try karein." }, 429);
+  if (!rateLimit(`proof:${clientIp(c.req.raw)}`, 10, 10 * 60_000)) return c.json({ error: tt(c, "errTooMany") }, 429);
   const body = z.object({ k: z.string().min(10).max(60), utr: z.string().regex(/^[A-Za-z0-9]{6,30}$/) }).safeParse(await c.req.json().catch(() => null));
   const number = Number(c.req.param("number"));
-  if (!body.success || !Number.isInteger(number)) return c.json({ error: "UTR sahi nahi hai." }, 400);
-  if (!timingSafeEqual(body.data.k, await trackKey(c.env, shop.id, number))) return c.json({ error: t.productNotFound }, 403);
+  if (!body.success || !Number.isInteger(number)) return c.json({ error: tt(c, "errBadUtr") }, 400);
+  if (!timingSafeEqual(body.data.k, await trackKey(c.env, shop.id, number))) return c.json({ error: tt(c, "errLinkInvalid") }, 403);
   const o = await loadOrder(c, shop.id, number);
-  if (!o || o.payment_method !== "upi_manual" || !["pending", "proof_uploaded", "rejected"].includes(o.payment_status)) return c.json({ error: "Is order par payment ki zarurat nahi." }, 400);
+  if (!o || o.payment_method !== "upi_manual" || !["pending", "proof_uploaded", "rejected"].includes(o.payment_status)) return c.json({ error: tt(c, "errNoPayment") }, 400);
   await c.env.DB.prepare("UPDATE orders SET utr = ?, payment_status = 'proof_uploaded' WHERE id = ? AND shop_id = ?").bind(body.data.utr, o.id, shop.id).run();
   await c.env.DB.prepare("INSERT INTO order_events (id, order_id, shop_id, at, type, detail) VALUES (?,?,?,?,?,?)").bind(newId(), o.id, shop.id, new Date().toISOString(), "proof", body.data.utr).run();
   await notifySeller(c.env, shop as never, `Order #${number}: payment ka UTR aaya`, `UTR ${body.data.utr}, ₹${o.total}. Bank me paisa dekh kar portal me "Payment confirm" karein.`);
@@ -205,30 +207,30 @@ storefront.get("/s/:slug", async (c) => {
   const shop = c.var.shop;
   const { results } = await c.env.DB.prepare(`SELECT ${PRODUCT_COLS} FROM products p WHERE p.shop_id = ? AND p.active = 1 ORDER BY p.created_at DESC LIMIT 100`).bind(shop.id).all<ProductRow>();
   await logView(c, shop.id, shop.status, "view", { page: "home" });
-  return c.html(homePage(shop, results));
+  return c.html(homePage(shop, c.var.lang, results));
 });
 
 storefront.get("/s/:slug/p/:id", async (c) => {
   const shop = c.var.shop;
   const p = await c.env.DB.prepare(`SELECT ${PRODUCT_COLS} FROM products p WHERE p.id = ? AND p.shop_id = ? AND p.active = 1`).bind(c.req.param("id"), shop.id).first<ProductRow>();
-  if (!p) return c.html(trackPage(shop, t.productNotFound), 404);
+  if (!p) return c.html(trackPage(shop, c.var.lang, tt(c, "errProductNotFound")), 404);
   const { results: images } = await c.env.DB.prepare("SELECT url FROM product_images WHERE product_id = ? AND shop_id = ? ORDER BY sort").bind(p.id, shop.id).all<{ url: string }>();
   await logView(c, shop.id, shop.status, "view", { page: "product", id: p.id });
-  return c.html(productPage(shop, p, images));
+  return c.html(productPage(shop, c.var.lang, p, images));
 });
 
-storefront.get("/s/:slug/cart", (c) => c.html(cartPage(c.var.shop)));
-storefront.get("/s/:slug/checkout", (c) => c.html(checkoutPage(c.var.shop)));
-storefront.get("/s/:slug/privacy", (c) => c.html(privacyPage(c.var.shop)));
-storefront.get("/s/:slug/track", (c) => c.html(trackPage(c.var.shop)));
+storefront.get("/s/:slug/cart", (c) => c.html(cartPage(c.var.shop, c.var.lang)));
+storefront.get("/s/:slug/checkout", (c) => c.html(checkoutPage(c.var.shop, c.var.lang)));
+storefront.get("/s/:slug/privacy", (c) => c.html(privacyPage(c.var.shop, c.var.lang)));
+storefront.get("/s/:slug/track", (c) => c.html(trackPage(c.var.shop, c.var.lang)));
 
 storefront.get("/s/:slug/track/go", async (c) => {
   const shop = c.var.shop;
-  if (!rateLimit(`track:${clientIp(c.req.raw)}`, 15, 10 * 60_000)) return c.html(trackPage(shop, "Thodi der baad try karein."), 429);
+  if (!rateLimit(`track:${clientIp(c.req.raw)}`, 15, 10 * 60_000)) return c.html(trackPage(shop, c.var.lang, tt(c, "errTooMany")), 429);
   const number = Number(c.req.query("number"));
   const phone = (c.req.query("phone") ?? "").replace(/\D/g, "").slice(-10);
   const o = Number.isInteger(number) ? await loadOrder(c, shop.id, number) : null;
-  if (!o || o.buyer_phone !== phone) return c.html(trackPage(shop, "Order number ya mobile number match nahi hua."), 404);
+  if (!o || o.buyer_phone !== phone) return c.html(trackPage(shop, c.var.lang, tt(c, "trackMismatch")), 404);
   return c.redirect(`/s/${shop.slug}/order/${number}?k=${await trackKey(c.env, shop.id, number)}`);
 });
 
@@ -236,12 +238,12 @@ storefront.get("/s/:slug/order/:number", async (c) => {
   const shop = c.var.shop;
   const number = Number(c.req.param("number"));
   const k = c.req.query("k") ?? "";
-  if (!Number.isInteger(number) || !timingSafeEqual(k, await trackKey(c.env, shop.id, number))) return c.html(trackPage(shop, "Order dekhne ke liye order number aur mobile number daalein."), 403);
+  if (!Number.isInteger(number) || !timingSafeEqual(k, await trackKey(c.env, shop.id, number))) return c.html(trackPage(shop, c.var.lang, tt(c, "trackAsk")), 403);
   const o = await loadOrder(c, shop.id, number);
-  if (!o) return c.html(trackPage(shop, "Order nahi mila."), 404);
+  if (!o) return c.html(trackPage(shop, c.var.lang, tt(c, "orderNotFound")), 404);
   c.header("Cache-Control", "no-store");
   c.header("Referrer-Policy", "no-referrer");
-  return c.html(orderPage(shop, o, k));
+  return c.html(orderPage(shop, c.var.lang, o, k));
 });
 
 storefront.get("/s/:slug/manifest.webmanifest", (c) => c.body(JSON.stringify(manifestFor(c.var.shop)), 200, { "content-type": "application/manifest+json" }));

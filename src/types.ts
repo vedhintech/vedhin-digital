@@ -42,5 +42,5 @@ export interface Shop {
   upi_qr_url: string | null;
 }
 
-export type AppVars = { shop: Shop; sellerId: string };
+export type AppVars = { shop: Shop; sellerId: string; lang: import("./i18n").Lang };
 export type AppBindings = { Bindings: Env; Variables: AppVars };

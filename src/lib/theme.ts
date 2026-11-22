@@ -65,14 +65,15 @@ export function defaultTheme(shopName: string, category: string | null): Theme {
   return {
     palette: DEFAULT_PALETTE[category ?? "other"] ?? "mono",
     hero: {
-      headline: jewel ? `${sn}: gehne jo kahani kehte hain` : `${sn}: aapki pasand ke naye suits`,
-      sub: jewel ? "Haath se chuni hui jewellery, seedhe dukaan se aapke ghar tak." : "Kapde jo dukaan me dekhe, ab ghar baithe order karein.",
-      cta: "Collection dekhein",
+      // Empty = use the translated default for the buyer's language (see i18n hero* keys).
+      headline: "",
+      sub: "",
+      cta: "",
       use_3d: false,
     },
     sections: ["announcement_bar", "hero", "categories", "featured_products", "story", "location", "footer"],
-    announcement: "Poore India me delivery. Order WhatsApp par bhi le sakte hain.",
-    story: `${shopName} aapki apni dukaan hai. Ab har naya design aap yahin dekh sakte hain aur seedhe order kar sakte hain.`,
+    announcement: "",
+    story: "",
     logo: { mode: "generated", text: sn, icon: ICONS[hashStr(shopName) % ICONS.length]!, layout: "stacked", url: null },
   };
 }

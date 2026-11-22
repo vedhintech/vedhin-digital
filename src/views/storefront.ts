@@ -1,6 +1,8 @@
 import { html, esc, raw, rupees, safeUrl, Raw } from "../lib/html";
 import { PALETTES, FONT_PAIRS, parseTheme, logoSvg, type Theme } from "../lib/theme";
 import type { Shop } from "../types";
+import { LANGS, isRtl, trFor, type Lang, type Tr, type UiKey } from "../i18n";
+import { en } from "../i18n/ui-en";
 
 export interface ProductRow {
   id: string;
@@ -102,141 +104,174 @@ textarea{min-height:96px}
 `;
 }
 
+const CLIENT_KEYS = ["addedToCart", "cartEmpty", "unavailable", "decrease", "increase", "networkError", "errInvalid", "errSomething", "utrInvalid", "utrThanks"] as const;
+
 const CLIENT_JS = `
 (function(){
-var slug=document.body.dataset.slug,K='vd_cart_'+slug;
+var slug=document.body.dataset.slug,K='vd_cart_'+slug,T=window.T||{};
 function get(){try{return JSON.parse(localStorage.getItem(K)||'[]')}catch(e){return[]}}
 function set(c){try{localStorage.setItem(K,JSON.stringify(c))}catch(e){}badge()}
 function badge(){var n=get().reduce(function(a,b){return a+b.qty},0);document.querySelectorAll('[data-count]').forEach(function(e){e.textContent=n})}
 window.VD={get:get,set:set,add:function(id){var c=get(),f=c.find(function(x){return x.id===id});if(f)f.qty=Math.min(f.qty+1,10);else c.push({id:id,qty:1});set(c)}};
 badge();
-document.querySelectorAll('[data-add]').forEach(function(b){b.addEventListener('click',function(){VD.add(b.dataset.add);var o=b.textContent;b.textContent='Cart me jod diya';setTimeout(function(){b.textContent=o},1400)})});
+document.querySelectorAll('[data-add]').forEach(function(b){b.addEventListener('click',function(){VD.add(b.dataset.add);var o=b.textContent;b.textContent=T.addedToCart||'Added to cart';setTimeout(function(){b.textContent=o},1400)})});
 var chips=document.querySelectorAll('.chip');
 chips.forEach(function(ch){ch.addEventListener('click',function(){chips.forEach(function(x){x.setAttribute('aria-pressed','false')});ch.setAttribute('aria-pressed','true');var c=ch.dataset.cat;document.querySelectorAll('.card[data-cat]').forEach(function(card){card.style.display=(!c||card.dataset.cat===c)?'':'none'})})});
+var ls=document.getElementById('langsel');
+if(ls)ls.addEventListener('change',function(){var u=new URL(location.href);u.searchParams.set('lang',ls.value);location.href=u.toString()});
 })();
 `;
 
-export function layout(shop: Shop, title: string, body: Raw | string, opts: { script?: string; noBar?: boolean; desc?: string } = {}): string {
+const EXTRA_CSS = `.lang{min-height:40px;max-width:120px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);font:inherit;font-size:14px;padding:0 8px;margin-inline-start:auto;margin-inline-end:8px}
+[dir=rtl] .bar,[dir=rtl] .line{direction:rtl}`;
+
+const jsonForScript = (o: unknown) => JSON.stringify(o).replace(/</g, "\\u003c");
+
+export function layout(shop: Shop, L: Lang, title: string, body: Raw | string, opts: { script?: string; desc?: string } = {}): string {
+  const T = trFor(L);
   const theme = parseTheme(shop.theme_json, shop.name, shop.category);
   const variant = variantOf(shop);
   const p = PALETTES[theme.palette]!;
   const logo = theme.logo.mode === "upload" && safeUrl(theme.logo.url) ? `<img src="${esc(safeUrl(theme.logo.url))}" alt="${esc(shop.name)}" height="44">` : logoSvg(theme.logo, p.primary, p.accent);
   const preview = shop.status === "preview";
-  return `<!doctype html><html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
+  const meta = LANGS.find((l) => l.code === L)!;
+  const fontFam = meta.font ? meta.font.replace(/\+/g, " ") : "";
+  const scriptFont = meta.font ? `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${meta.font}:wght@400;600;700&display=swap"><style>body,button,input,select,textarea,h1,h2,h3,.btn{font-family:'${fontFam}',system-ui,sans-serif}h1,h2,h3{letter-spacing:0;font-style:normal}</style>` : "";
+  const clientT: Record<string, string> = {};
+  for (const k of CLIENT_KEYS) clientT[k] = T(k);
+  const langSel = `<select id="langsel" class="lang" aria-label="${esc(T("language"))}">${LANGS.map((l) => `<option value="${l.code}"${l.code === L ? " selected" : ""} lang="${l.code}">${esc(l.name)}</option>`).join("")}</select>`;
+  return `<!doctype html><html lang="${L}" dir="${isRtl(L) ? "rtl" : "ltr"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
 <meta name="description" content="${esc(opts.desc ?? shop.tagline ?? shop.name)}"><meta name="theme-color" content="${p.primary}">
 <link rel="manifest" href="${base(shop)}/manifest.webmanifest">${preview ? '<meta name="robots" content="noindex,nofollow">' : ""}
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="${FONT_PAIRS[variant]!.link}">
-<style>${css(variant, theme.palette)}</style></head>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="${FONT_PAIRS[variant]!.link}">${scriptFont}
+<style>${css(variant, theme.palette)}${EXTRA_CSS}</style></head>
 <body data-slug="${esc(shop.slug)}">
-${preview ? `<div class="preview">Preview: ye dukaan abhi live nahi hai. Vedhin Technology ne ${esc(shop.name)} ke liye banayi hai.</div>` : ""}
-<header class="top"><div class="wrap"><a class="logo" href="${base(shop)}" aria-label="${esc(shop.name)} home">${logo}</a><a class="cartbtn" href="${base(shop)}/cart">Cart <b data-count>0</b></a></div></header>
+${preview ? `<div class="preview">${esc(T("previewBanner", { shop: shop.name }))}</div>` : ""}
+<header class="top"><div class="wrap"><a class="logo" href="${base(shop)}" aria-label="${esc(shop.name)}">${logo}</a>${langSel}<a class="cartbtn" href="${base(shop)}/cart">${esc(T("cart"))} <b data-count>0</b></a></div></header>
 ${body}
+<script>window.T=${jsonForScript(clientT)};</script>
 <script>${CLIENT_JS}${opts.script ?? ""}</script>
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('${base(shop)}/sw.js',{scope:'${base(shop)}/'}).catch(function(){})}</script>
 </body></html>`;
 }
 
-function card(shop: Shop, pr: ProductRow): Raw {
+function card(shop: Shop, T: Tr, pr: ProductRow): Raw {
   const sold = pr.sold_out === 1 || pr.stock <= 0;
   const img = safeUrl(pr.image);
   return html`<a class="card" href="${base(shop)}/p/${pr.id}" data-cat="${pr.category ?? ""}">
 <div class="im">${img ? raw(`<img src="${esc(img)}" alt="${esc(pr.name)}" loading="lazy" width="400" height="500">`) : ""}</div>
-<div class="tx"><h3>${pr.name}</h3><div><span class="price">${rupees(pr.price)}</span>${pr.mrp && pr.mrp > pr.price ? html`<span class="mrp">${rupees(pr.mrp)}</span>` : ""}</div>${sold ? html`<span class="tag so">Sold out</span>` : ""}</div></a>`;
+<div class="tx"><h3>${pr.name}</h3><div><span class="price">${rupees(pr.price)}</span>${pr.mrp && pr.mrp > pr.price ? html`<span class="mrp">${rupees(pr.mrp)}</span>` : ""}</div>${sold ? html`<span class="tag so">${T("soldOut")}</span>` : ""}</div></a>`;
 }
 
-export function homePage(shop: Shop, products: ProductRow[]): string {
+export function homePage(shop: Shop, L: Lang, products: ProductRow[]): string {
+  const T = trFor(L);
   const theme = parseTheme(shop.theme_json, shop.name, shop.category);
+  const jewel = variantOf(shop) === "jewellery";
+  const sn = theme.logo.text || shop.name;
+  // Seller-written text wins; empty means "use the translated default for the buyer's language".
+  const headline = theme.hero.headline || T(jewel ? "heroHeadlineJewel" : "heroHeadlineDress", { name: sn });
+  const sub = theme.hero.sub || T(jewel ? "heroSubJewel" : "heroSubDress");
+  const cta = theme.hero.cta || T("heroCta");
+  const announcement = theme.announcement || T("announcement");
+  const story = theme.story || T("story", { shop: shop.name });
   const cats = [...new Set(products.map((x) => x.category).filter(Boolean))] as string[];
-  const wa = waLink(shop.whatsapp || shop.phone, `Namaste, main ${shop.name} ki website se baat kar raha hu.`);
+  const wa = waLink(shop.whatsapp || shop.phone, `Hi, I found ${shop.name} on your website.`);
   const sec: Record<string, () => Raw | string> = {
-    announcement_bar: () => (theme.announcement ? html`<div class="ann">${theme.announcement}</div>` : ""),
-    hero: () => html`<div class="hero"><div class="wrap"><h1>${theme.hero.headline}</h1><p>${theme.hero.sub}</p><a class="btn light" href="#collection">${theme.hero.cta}</a></div></div><div class="lehariya" aria-hidden="true"></div>`,
+    announcement_bar: () => html`<div class="ann">${announcement}</div>`,
+    hero: () => html`<div class="hero"><div class="wrap"><h1>${headline}</h1><p>${sub}</p><a class="btn light" href="#collection">${cta}</a></div></div><div class="lehariya" aria-hidden="true"></div>`,
     categories: () => "",
-    featured_products: () => html`<section id="collection"><div class="wrap"><h2>Collection</h2>
-${cats.length > 1 ? html`<div class="chips" role="group" aria-label="Category"><button class="chip" aria-pressed="true" data-cat="">Sab</button>${cats.map((c) => html`<button class="chip" aria-pressed="false" data-cat="${c}">${c}</button>`)}</div>` : ""}
-${products.length ? html`<div class="grid">${products.map((x) => card(shop, x))}</div>` : html`<div class="panel">Abhi koi product nahi hai. Jaldi hi naya collection aayega.</div>`}</div></section>`,
-    story: () => html`<section class="story"><div class="wrap"><h2>${shop.name}</h2><p>${theme.story}</p></div></section>`,
+    featured_products: () => html`<section id="collection"><div class="wrap"><h2>${T("collection")}</h2>
+${cats.length > 1 ? html`<div class="chips" role="group" aria-label="${T("collection")}"><button class="chip" aria-pressed="true" data-cat="">${T("all")}</button>${cats.map((c) => html`<button class="chip" aria-pressed="false" data-cat="${c}">${c}</button>`)}</div>` : ""}
+${products.length ? html`<div class="grid">${products.map((x) => card(shop, T, x))}</div>` : html`<div class="panel">${T("noProducts")}</div>`}</div></section>`,
+    story: () => html`<section class="story"><div class="wrap"><h2>${shop.name}</h2><p>${story}</p></div></section>`,
     location: () =>
       shop.address || shop.maps_url
-        ? html`<section><div class="wrap"><h2>Dukaan par aayein</h2><div class="panel info">${shop.address ? html`<div>${shop.address}</div>` : ""}${safeUrl(shop.maps_url) ? html`<div><a class="btn ghost" href="${safeUrl(shop.maps_url)}" rel="noopener">Google Maps par dekhein</a></div>` : ""}</div></div></section>`
+        ? html`<section><div class="wrap"><h2>${T("visitStore")}</h2><div class="panel info">${shop.address ? html`<div>${shop.address}</div>` : ""}${safeUrl(shop.maps_url) ? html`<div><a class="btn ghost" href="${safeUrl(shop.maps_url)}" rel="noopener">${T("openMaps")}</a></div>` : ""}</div></div></section>`
         : "",
-    footer: () => html`<footer class="footer"><div class="wrap"><h3>${shop.name}</h3><p>${[shop.phone ? `Phone: ${shop.phone}` : "", shop.instagram ? `Instagram: ${shop.instagram}` : ""].filter(Boolean).join("  |  ")}</p><p><a href="${base(shop)}/track">Order track karein</a>  |  <a href="${base(shop)}/privacy">Privacy</a></p><small>Powered by Vedhin Technology</small></div></footer>`,
+    footer: () => html`<footer class="footer"><div class="wrap"><h3>${shop.name}</h3><p>${[shop.phone ? `${T("phoneLabel")}: ${shop.phone}` : "", shop.instagram ? `Instagram: ${shop.instagram}` : ""].filter(Boolean).join("  |  ")}</p><p><a href="${base(shop)}/track">${T("trackOrder")}</a>  |  <a href="${base(shop)}/privacy">${T("privacy")}</a></p><small>${T("poweredBy")}</small></div></footer>`,
   };
   const body = theme.sections.map((s) => String(sec[s]?.() ?? "")).join("\n");
-  const bar = wa ? `<div class="bar"><a class="btn wa" href="${esc(wa)}" rel="noopener">WhatsApp par poochein</a></div>` : "";
-  return layout(shop, `${shop.name}${shop.tagline ? " | " + shop.tagline : ""}`, raw(body + bar));
+  const bar = wa ? `<div class="bar"><a class="btn wa" href="${esc(wa)}" rel="noopener">${esc(T("askOnWhatsapp"))}</a></div>` : "";
+  return layout(shop, L, `${shop.name}${shop.tagline ? " | " + shop.tagline : ""}`, raw(body + bar));
 }
 
-export function productPage(shop: Shop, pr: ProductRow, images: { url: string }[]): string {
+export function productPage(shop: Shop, L: Lang, pr: ProductRow, images: { url: string }[]): string {
+  const T = trFor(L);
   let attrs: Record<string, unknown> = {};
   try {
     attrs = pr.attributes_json ? JSON.parse(pr.attributes_json) : {};
   } catch {
     attrs = {};
   }
+  const label = (k: string) => {
+    const key = `attr_${k}` as UiKey;
+    return en[key] ? T(key) : k.replace(/_/g, " ");
+  };
   const sold = pr.sold_out === 1 || pr.stock <= 0;
   const img = safeUrl(images[0]?.url);
-  const wa = waLink(shop.whatsapp || shop.phone, `Namaste, mujhe "${pr.name}" ke baare me poochna hai.`);
+  const wa = waLink(shop.whatsapp || shop.phone, `Hi, I would like to ask about "${pr.name}".`);
   const body = html`<div class="wrap"><div class="pd">
 <div class="im">${img ? raw(`<img src="${esc(img)}" alt="${esc(pr.name)}" width="800" height="1000">`) : ""}</div>
 <div><h1 style="font-size:clamp(28px,6vw,40px)">${pr.name}</h1>
 <p style="font-size:22px;margin:10px 0"><span class="price">${rupees(pr.price)}</span>${pr.mrp && pr.mrp > pr.price ? html`<span class="mrp">${rupees(pr.mrp)}</span>` : ""}</p>
-${sold ? html`<span class="tag so">Sold out</span>` : pr.stock <= 3 ? html`<span class="tag">Sirf ${pr.stock} bache hain</span>` : ""}
-<div class="attrs">${Object.entries(attrs).filter(([, v]) => v !== "" && v !== null && v !== undefined).map(([k, v]) => html`<span class="tag">${k.replace(/_/g, " ")}: ${Array.isArray(v) ? v.join(", ") : v === true ? "Haan" : v === false ? "Nahi" : String(v)}</span>`)}</div>
+${sold ? html`<span class="tag so">${T("soldOut")}</span>` : pr.stock <= 3 ? html`<span class="tag">${T("onlyLeft", { n: pr.stock })}</span>` : ""}
+<div class="attrs">${Object.entries(attrs).filter(([, v]) => v !== "" && v !== null && v !== undefined).map(([k, v]) => html`<span class="tag">${label(k)}: ${Array.isArray(v) ? v.join(", ") : v === true ? T("yes") : v === false ? T("no") : String(v)}</span>`)}</div>
 <p>${pr.description ?? ""}</p>
-<p><a href="${base(shop)}">Aur products dekhein</a></p></div></div></div>
-<div class="bar"><button class="btn" data-add="${pr.id}" ${sold ? "disabled" : ""}>${sold ? "Sold out" : "Cart me jodein"}</button>${wa ? html`<a class="btn wa" href="${wa}" rel="noopener">WhatsApp</a>` : ""}</div>`;
-  return layout(shop, `${pr.name} | ${shop.name}`, body, { desc: pr.description ?? pr.name });
+<p><a href="${base(shop)}">${T("moreProducts")}</a></p></div></div></div>
+<div class="bar"><button class="btn" data-add="${pr.id}" ${sold ? "disabled" : ""}>${sold ? T("soldOut") : T("addToCart")}</button>${wa ? html`<a class="btn wa" href="${wa}" rel="noopener">${T("whatsapp")}</a>` : ""}</div>`;
+  return layout(shop, L, `${pr.name} | ${shop.name}`, body, { desc: pr.description ?? pr.name });
 }
 
-export function cartPage(shop: Shop): string {
-  const body = html`<div class="wrap" style="padding-top:24px"><h1 style="font-size:32px;margin-bottom:12px">Aapka cart</h1><div id="lines" class="panel">Cart load ho raha hai...</div>
-<div id="sum" style="display:none"><div class="total"><span>Total</span><span id="tot"></span></div><p class="note">Delivery ka charge seller order ke baad batayega.</p><p><a class="btn" href="${base(shop)}/checkout">Checkout karein</a></p></div>
-<p><a href="${base(shop)}">Shopping jaari rakhein</a></p></div>`;
+export function cartPage(shop: Shop, L: Lang): string {
+  const T = trFor(L);
+  const body = html`<div class="wrap" style="padding-top:24px"><h1 style="font-size:32px;margin-bottom:12px">${T("yourCart")}</h1><div id="lines" class="panel">${T("cartLoading")}</div>
+<div id="sum" style="display:none"><div class="total"><span>${T("total")}</span><span id="tot"></span></div><p class="note">${T("deliveryNote")}</p><p><a class="btn" href="${base(shop)}/checkout">${T("checkout")}</a></p></div>
+<p><a href="${base(shop)}">${T("continueShopping")}</a></p></div>`;
   const script = `
-(function(){var slug=document.body.dataset.slug;
+(function(){var slug=document.body.dataset.slug,T=window.T;
 function R(){var c=VD.get();var L=document.getElementById('lines');
-if(!c.length){L.textContent='Cart khali hai.';document.getElementById('sum').style.display='none';return}
+if(!c.length){L.textContent=T.cartEmpty;document.getElementById('sum').style.display='none';return}
 fetch('/s/'+slug+'/api/cart/price',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({items:c})}).then(function(r){return r.json()}).then(function(d){
 L.innerHTML='';d.lines.forEach(function(l){var el=document.createElement('div');el.className='line';
 var im=document.createElement('img');im.alt='';if(l.image)im.src=l.image;el.appendChild(im);
 var m=document.createElement('div');var n=document.createElement('strong');n.textContent=l.name;m.appendChild(n);var q=document.createElement('div');q.className='qty';
-var mi=document.createElement('button');mi.textContent='-';mi.setAttribute('aria-label','Kam karein');var qq=document.createElement('span');qq.textContent=l.qty;var pl=document.createElement('button');pl.textContent='+';pl.setAttribute('aria-label','Badhayein');
+var mi=document.createElement('button');mi.textContent='-';mi.setAttribute('aria-label',T.decrease);var qq=document.createElement('span');qq.textContent=l.qty;var pl=document.createElement('button');pl.textContent='+';pl.setAttribute('aria-label',T.increase);
 q.appendChild(mi);q.appendChild(qq);q.appendChild(pl);m.appendChild(q);
-if(!l.available){var w=document.createElement('div');w.className='err';w.textContent='Ye product abhi available nahi hai.';m.appendChild(w)}
+if(!l.available){var w=document.createElement('div');w.className='err';w.textContent=T.unavailable;m.appendChild(w)}
 el.appendChild(m);var pr=document.createElement('div');pr.textContent='₹'+(l.price*l.qty).toLocaleString('en-IN');el.appendChild(pr);
 mi.onclick=function(){ch(l.id,-1)};pl.onclick=function(){ch(l.id,1)};L.appendChild(el)});
 document.getElementById('tot').textContent='₹'+d.subtotal.toLocaleString('en-IN');document.getElementById('sum').style.display=''})}
 function ch(id,dq){var c=VD.get();var f=c.find(function(x){return x.id===id});if(!f)return;f.qty+=dq;c=c.filter(function(x){return x.qty>0});VD.set(c);R()}
 R()})();`;
-  return layout(shop, `Cart | ${shop.name}`, body, { script });
+  return layout(shop, L, `${T("cart")} | ${shop.name}`, body, { script });
 }
 
-export function checkoutPage(shop: Shop): string {
-  const body = html`<div class="wrap" style="padding-top:24px;max-width:560px"><h1 style="font-size:32px;margin-bottom:8px">Order details</h1>
-${shop.status === "preview" ? html`<p class="note">Ye preview hai. Order live hone ke baad hi liye ja sakte hain.</p>` : ""}
+export function checkoutPage(shop: Shop, L: Lang): string {
+  const T = trFor(L);
+  const body = html`<div class="wrap" style="padding-top:24px;max-width:560px"><h1 style="font-size:32px;margin-bottom:8px">${T("orderDetails")}</h1>
+${shop.status === "preview" ? html`<p class="note">${T("previewNoOrders")}</p>` : ""}
 <form id="f" class="panel" novalidate>
-<label for="n">Aapka naam</label><input id="n" name="name" autocomplete="name" required maxlength="80">
-<label for="p">Mobile number</label><input id="p" name="phone" inputmode="numeric" autocomplete="tel" required maxlength="10" pattern="[6-9][0-9]{9}" placeholder="10 digit number">
-<label for="a">Poora address</label><textarea id="a" name="address" autocomplete="street-address" required maxlength="300"></textarea>
-<label for="z">Pincode</label><input id="z" name="pincode" inputmode="numeric" autocomplete="postal-code" required maxlength="6" pattern="[1-9][0-9]{5}">
-<label for="c">Shehar</label><input id="c" name="city" autocomplete="address-level2" required maxlength="60">
-<label for="m">Payment kaise karenge</label><select id="m" name="payment_method"><option value="upi_manual">UPI se (screenshot/UTR dena hoga)</option><option value="cod">Cash on delivery</option></select>
+<label for="n">${T("fullName")}</label><input id="n" name="name" autocomplete="name" required maxlength="80">
+<label for="p">${T("mobile")}</label><input id="p" name="phone" inputmode="numeric" autocomplete="tel" required maxlength="10" pattern="[6-9][0-9]{9}" placeholder="${T("mobileHint")}">
+<label for="a">${T("address")}</label><textarea id="a" name="address" autocomplete="street-address" required maxlength="300"></textarea>
+<label for="z">${T("pincode")}</label><input id="z" name="pincode" inputmode="numeric" autocomplete="postal-code" required maxlength="6" pattern="[1-9][0-9]{5}">
+<label for="c">${T("city")}</label><input id="c" name="city" autocomplete="address-level2" required maxlength="60">
+<label for="m">${T("payHow")}</label><select id="m" name="payment_method"><option value="upi_manual">${T("payUpi")}</option><option value="cod">${T("payCod")}</option></select>
 <p id="msg" class="err" role="alert"></p>
-<button class="btn" type="submit" style="width:100%">Order karein</button></form></div>`;
+<button class="btn" type="submit" style="width:100%">${T("placeOrder")}</button></form></div>`;
   const script = `
-(function(){var slug=document.body.dataset.slug;var f=document.getElementById('f'),msg=document.getElementById('msg');
-f.addEventListener('submit',function(e){e.preventDefault();msg.textContent='';var c=VD.get();if(!c.length){msg.textContent='Cart khali hai.';return}
+(function(){var slug=document.body.dataset.slug,T=window.T;var f=document.getElementById('f'),msg=document.getElementById('msg');
+f.addEventListener('submit',function(e){e.preventDefault();msg.textContent='';var c=VD.get();if(!c.length){msg.textContent=T.cartEmpty;return}
 var d=Object.fromEntries(new FormData(f).entries());d.items=c;
 var b=f.querySelector('button');b.disabled=true;
 fetch('/s/'+slug+'/api/orders',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(d)}).then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j}})}).then(function(x){
-if(!x.ok){msg.textContent=x.j.error||'Order nahi ho paya.';b.disabled=false;return}
-VD.set([]);location.href=x.j.url}).catch(function(){msg.textContent='Network dikkat hai, dobara try karein.';b.disabled=false})})})();`;
-  return layout(shop, `Checkout | ${shop.name}`, body, { script });
+if(!x.ok){msg.textContent=x.j.error||T.errSomething;b.disabled=false;return}
+VD.set([]);location.href=x.j.url}).catch(function(){msg.textContent=T.networkError;b.disabled=false})})})();`;
+  return layout(shop, L, `${T("checkout")} | ${shop.name}`, body, { script });
 }
 
 const STEPS = ["placed", "confirmed", "packed", "dispatched", "delivered"] as const;
-const STEP_LABEL: Record<string, string> = { placed: "Order mil gaya", confirmed: "Payment confirm", packed: "Pack ho gaya", dispatched: "Courier ko diya", delivered: "Delivered" };
+const STEP_KEY = { placed: "stepPlaced", confirmed: "stepConfirmed", packed: "stepPacked", dispatched: "stepDispatched", delivered: "stepDelivered" } as const;
 
 export interface OrderView {
   number: number;
@@ -251,51 +286,54 @@ export interface OrderView {
   items: { name: string; qty: number; price: number }[];
 }
 
-export function orderPage(shop: Shop, o: OrderView, key: string): string {
+export function orderPage(shop: Shop, L: Lang, o: OrderView, key: string): string {
+  const T = trFor(L);
   const idx = Math.max(0, STEPS.indexOf(o.status as (typeof STEPS)[number]));
   const cancelled = o.status === "cancelled" || o.status === "returned";
   const upi = shop.upi_id && o.payment_method === "upi_manual" && (o.payment_status === "pending" || o.payment_status === "proof_uploaded" || o.payment_status === "rejected");
   const upiLink = upi ? `upi://pay?pa=${encodeURIComponent(shop.upi_id!)}&pn=${encodeURIComponent(shop.name)}&am=${o.total}&cu=INR&tn=${encodeURIComponent("Order " + o.number)}` : "";
-  const body = html`<div class="wrap" style="padding-top:24px;max-width:600px"><h1 style="font-size:32px">Order #${o.number}</h1><p>Namaste ${o.buyer_name}, aapka order ${shop.name} ko mil gaya hai.</p>
-<div class="panel">${o.items.map((i) => html`<div style="display:flex;justify-content:space-between;padding:4px 0"><span>${i.name} x ${i.qty}</span><span>${rupees(i.price * i.qty)}</span></div>`)}<div class="total"><span>Total</span><span>${rupees(o.total)}</span></div></div>
-${upi ? html`<div class="panel" style="margin-top:16px"><h3 style="font-size:22px">Payment karein</h3>
-${o.payment_status === "rejected" ? html`<p class="err">Pichla payment confirm nahi ho paya. Dobara check karke UTR bhejein.</p>` : ""}
-<p>UPI ID: <strong>${shop.upi_id}</strong></p>
-<p><a class="btn" href="${upiLink}">UPI app me pay karein (${rupees(o.total)})</a></p>
-<p class="note">Payment ke baad niche UTR / transaction number daalein. Seller bank me paisa dekh kar confirm karega.</p>
-<label for="utr">UTR / Transaction ID</label><input id="utr" maxlength="30" placeholder="12 digit number">
-<p id="pm" role="status"></p><button class="btn" id="sub" type="button">Payment bheja, UTR submit karein</button></div>` : ""}
-${o.payment_method === "cod" ? html`<p class="note">Cash on delivery: seller aapko confirm karne ke liye sampark kar sakta hai.</p>` : ""}
-${cancelled ? html`<p class="err">Ye order ${o.status === "cancelled" ? "cancel" : "return"} ho gaya hai.</p>` : html`<ol class="timeline">${STEPS.map((s, i) => html`<li class="${i <= idx ? "done" : ""}">${STEP_LABEL[s]}</li>`)}</ol>`}
-${o.courier || o.tracking_id ? html`<div class="panel"><strong>Courier:</strong> ${o.courier ?? "-"}<br><strong>Tracking ID:</strong> ${o.tracking_id ?? "-"}${safeUrl(o.tracking_url) ? html`<p><a class="btn ghost" href="${safeUrl(o.tracking_url)}" rel="noopener">Courier ki site par track karein</a></p>` : ""}</div>` : ""}
-<p><a href="${base(shop)}">Shopping par wapas</a></p></div>`;
+  const body = html`<div class="wrap" style="padding-top:24px;max-width:600px"><h1 style="font-size:32px">${T("orderNo", { n: o.number })}</h1><p>${T("orderGreeting", { name: o.buyer_name, shop: shop.name })}</p>
+<div class="panel">${o.items.map((i) => html`<div style="display:flex;justify-content:space-between;padding:4px 0"><span>${i.name} x ${i.qty}</span><span>${rupees(i.price * i.qty)}</span></div>`)}<div class="total"><span>${T("total")}</span><span>${rupees(o.total)}</span></div></div>
+${upi ? html`<div class="panel" style="margin-top:16px"><h3 style="font-size:22px">${T("payNow")}</h3>
+${o.payment_status === "rejected" ? html`<p class="err">${T("payRejected")}</p>` : ""}
+<p>${T("upiId")}: <strong>${shop.upi_id}</strong></p>
+<p><a class="btn" href="${upiLink}">${T("payViaUpi", { amount: rupees(o.total) })}</a></p>
+<p class="note">${T("payNote")}</p>
+<label for="utr">${T("utrLabel")}</label><input id="utr" maxlength="30" placeholder="${T("utrPlaceholder")}">
+<p id="pm" role="status"></p><button class="btn" id="sub" type="button">${T("submitUtr")}</button></div>` : ""}
+${o.payment_method === "cod" ? html`<p class="note">${T("codNote")}</p>` : ""}
+${cancelled ? html`<p class="err">${T(o.status === "cancelled" ? "orderCancelled" : "orderReturned")}</p>` : html`<ol class="timeline">${STEPS.map((s, i) => html`<li class="${i <= idx ? "done" : ""}">${T(STEP_KEY[s])}</li>`)}</ol>`}
+${o.courier || o.tracking_id ? html`<div class="panel"><strong>${T("courier")}:</strong> ${o.courier ?? "-"}<br><strong>${T("trackingId")}:</strong> ${o.tracking_id ?? "-"}${safeUrl(o.tracking_url) ? html`<p><a class="btn ghost" href="${safeUrl(o.tracking_url)}" rel="noopener">${T("trackOnCourier")}</a></p>` : ""}</div>` : ""}
+<p><a href="${base(shop)}">${T("backToShop")}</a></p></div>`;
   const script = upi
-    ? `(function(){var b=document.getElementById('sub');if(!b)return;b.onclick=function(){var u=document.getElementById('utr').value.trim();var m=document.getElementById('pm');if(u.length<6){m.className='err';m.textContent='Sahi UTR number daalein.';return}
-b.disabled=true;fetch('/s/'+document.body.dataset.slug+'/api/orders/${o.number}/proof',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({k:${JSON.stringify(key)},utr:u})}).then(function(r){return r.json()}).then(function(j){m.className=j.error?'err':'ok';m.textContent=j.error||'UTR mil gaya. Seller jald confirm karega.';b.disabled=false}).catch(function(){m.className='err';m.textContent='Network dikkat hai.';b.disabled=false})}})();`
+    ? `(function(){var T=window.T;var b=document.getElementById('sub');if(!b)return;b.onclick=function(){var u=document.getElementById('utr').value.trim();var m=document.getElementById('pm');if(u.length<6){m.className='err';m.textContent=T.utrInvalid;return}
+b.disabled=true;fetch('/s/'+document.body.dataset.slug+'/api/orders/${o.number}/proof',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({k:${JSON.stringify(key)},utr:u})}).then(function(r){return r.json()}).then(function(j){m.className=j.error?'err':'ok';m.textContent=j.error||T.utrThanks;b.disabled=false}).catch(function(){m.className='err';m.textContent=T.networkError;b.disabled=false})}})();`
     : "";
-  return layout(shop, `Order #${o.number} | ${shop.name}`, body, { script });
+  return layout(shop, L, `${T("orderNo", { n: o.number })} | ${shop.name}`, body, { script });
 }
 
-export function trackPage(shop: Shop, error?: string): string {
-  const body = html`<div class="wrap" style="padding-top:24px;max-width:520px"><h1 style="font-size:32px;margin-bottom:12px">Order track karein</h1>
-<form class="panel" method="get" action="${base(shop)}/track/go"><label for="no">Order number</label><input id="no" name="number" inputmode="numeric" required maxlength="8">
-<label for="ph">Order me diya mobile number</label><input id="ph" name="phone" inputmode="numeric" required maxlength="10">
-${error ? html`<p class="err" role="alert">${error}</p>` : ""}<p><button class="btn" type="submit">Status dekhein</button></p></form></div>`;
-  return layout(shop, `Track | ${shop.name}`, body);
+export function trackPage(shop: Shop, L: Lang, error?: string): string {
+  const T = trFor(L);
+  const body = html`<div class="wrap" style="padding-top:24px;max-width:520px"><h1 style="font-size:32px;margin-bottom:12px">${T("trackOrder")}</h1>
+<form class="panel" method="get" action="${base(shop)}/track/go"><label for="no">${T("orderNumber")}</label><input id="no" name="number" inputmode="numeric" required maxlength="8">
+<label for="ph">${T("phoneUsed")}</label><input id="ph" name="phone" inputmode="numeric" required maxlength="10">
+${error ? html`<p class="err" role="alert">${error}</p>` : ""}<p><button class="btn" type="submit">${T("viewStatus")}</button></p></form></div>`;
+  return layout(shop, L, `${T("trackOrder")} | ${shop.name}`, body);
 }
 
-export function privacyPage(shop: Shop): string {
-  const body = html`<div class="wrap" style="padding-top:24px;max-width:640px"><h1 style="font-size:32px;margin-bottom:12px">Privacy</h1>
-<p>Order ke liye hum aapka naam, mobile number aur address lete hain. Ye jaankari sirf ${shop.name} ko aapka order pahunchane ke liye di jaati hai.</p>
-<p>Shipping, return aur refund ki zimmedari dukaan ki hai. Ye website Vedhin Technology ki technology se chalti hai, aur Vedhin aapka paisa apne paas nahi rakhta.</p>
-<p>Apna data hatwane ke liye dukaan se sampark karein${shop.phone ? ": " + shop.phone : ""}.</p></div>`;
-  return layout(shop, `Privacy | ${shop.name}`, body);
+export function privacyPage(shop: Shop, L: Lang): string {
+  const T = trFor(L);
+  const body = html`<div class="wrap" style="padding-top:24px;max-width:640px"><h1 style="font-size:32px;margin-bottom:12px">${T("privacy")}</h1>
+<p>${T("privacyP1", { shop: shop.name })}</p>
+<p>${T("privacyP2", { shop: shop.name })}</p>
+<p>${T("privacyP3")}${shop.phone ? ": " + shop.phone : ""}</p></div>`;
+  return layout(shop, L, `${T("privacy")} | ${shop.name}`, body);
 }
 
 export function manifestFor(shop: Shop): object {
   const theme = parseTheme(shop.theme_json, shop.name, shop.category);
   const p = PALETTES[theme.palette]!;
-  return { name: shop.name, short_name: theme.logo.text || shop.name, start_url: `${base(shop)}/`, scope: `${base(shop)}/`, display: "standalone", background_color: p.bg, theme_color: p.primary, lang: "hi", icons: [{ src: `${base(shop)}/icon.svg`, sizes: "any", type: "image/svg+xml", purpose: "any" }] };
+  return { name: shop.name, short_name: theme.logo.text || shop.name, start_url: `${base(shop)}/`, scope: `${base(shop)}/`, display: "standalone", background_color: p.bg, theme_color: p.primary, lang: "en", icons: [{ src: `${base(shop)}/icon.svg`, sizes: "any", type: "image/svg+xml", purpose: "any" }] };
 }
 
 export function iconSvg(shop: Shop): string {
@@ -307,6 +345,6 @@ export function iconSvg(shop: Shop): string {
 
 export const SW_JS = `const C='vd-v1';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch',e=>{const r=e.request;if(r.method!=='GET')return;const u=new URL(r.url);if(u.pathname.includes('/api/'))return;
-e.respondWith(fetch(r).then(res=>{if(res.ok&&(r.mode==='navigate'||/\\.(svg|webp|png|jpg)$/.test(u.pathname))){const cp=res.clone();caches.open(C).then(c=>c.put(r,cp))}return res}).catch(()=>caches.match(r).then(m=>m||new Response('Internet nahi hai. Thodi der baad try karein.',{status:503}))))});`;
+e.respondWith(fetch(r).then(res=>{if(res.ok&&(r.mode==='navigate'||/\\.(svg|webp|png|jpg)$/.test(u.pathname))){const cp=res.clone();caches.open(C).then(c=>c.put(r,cp))}return res}).catch(()=>caches.match(r).then(m=>m||new Response('You are offline. Please try again shortly.',{status:503}))))});`;
 
 export type { Theme };

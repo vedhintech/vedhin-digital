@@ -1,0 +1,1 @@
+ALTER TABLE bot_state ADD COLUMN lang TEXT DEFAULT 'en';
