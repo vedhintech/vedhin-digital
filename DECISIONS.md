@@ -13,3 +13,11 @@
 - Seller chatbot replies in the language of the seller's last clear message. Hand-written catalogs: English, Hindi, Hinglish. Other Indian languages: the seller's text is translated to English by the AI provider for understanding and the English reply is translated back (budgeted via `bot_usage`, cached). Without AI configured it falls back to English.
 - Translations are machine-quality drafts; a native speaker should review before launch.
 - Updated CLAUDE.md rule 9 accordingly.
+
+## 2026-11-22: Security review fixes
+- Bot translation never sends lines containing links (seller login tokens) to the AI; only plain text lines are translated.
+- STOP is handled first, by phone number, in English/Hinglish/Hindi and 9 other scripts; "nahi chahiye" counts only as a whole message.
+- Order status change is a conditional update (no double restock on double-tap).
+- Cron cancels unpaid UPI orders after 48h and restores stock.
+- Stub logs mask phone numbers and emails. Preview view analytics throttled to 1 write per visitor/page/5 min.
+- Open items: admin 2FA (recommend Cloudflare Access in front of /admin, free), atomic order creation via DB.batch, magic-byte check + WebP conversion for uploads (needs R2), CSP/HSTS headers.

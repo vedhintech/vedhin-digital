@@ -281,7 +281,9 @@ seller.post("/seller/orders/:id/status", async (c) => {
   if (!o) return c.redirect(back("/seller/orders", undefined, "Order not found."));
   const next = String((await c.req.parseBody()).status ?? "");
   if (!(TRANSITIONS[o.status as string] ?? []).includes(next)) return c.redirect(back(`/seller/orders/${o.id}`, undefined, "This change is not possible right now."));
-  await c.env.DB.prepare("UPDATE orders SET status = ? WHERE id = ? AND shop_id = ?").bind(next, o.id, shop.id).run();
+  // Conditional update: a double-tap or second tab changes nothing and must not restock twice.
+  const upd = await c.env.DB.prepare("UPDATE orders SET status = ? WHERE id = ? AND shop_id = ? AND status = ?").bind(next, o.id, shop.id, o.status).run();
+  if ((upd.meta?.changes ?? 0) === 0) return c.redirect(back(`/seller/orders/${o.id}`, undefined, "This order was already updated."));
   if (next === "cancelled") {
     const { results } = await c.env.DB.prepare("SELECT product_id, qty FROM order_items WHERE order_id = ? AND shop_id = ?").bind(o.id, shop.id).all<{ product_id: string; qty: number }>();
     for (const it of results) await c.env.DB.prepare("UPDATE products SET stock = stock + ? WHERE id = ? AND shop_id = ?").bind(it.qty, it.product_id, shop.id).run();

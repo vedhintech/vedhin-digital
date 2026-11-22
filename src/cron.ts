@@ -1,3 +1,4 @@
+import { newId } from "./lib/id";
 import type { Env } from "./types";
 import { computeScore, HOT_THRESHOLD, PRICE_RE, type Signals } from "./lib/scoring";
 import { telegram } from "./lib/notify";
@@ -68,8 +69,27 @@ export async function dailyDigest(env: Env, now = new Date()): Promise<void> {
   await telegram(env, `Aaj ka digest: naye leads ${newLeads}, hot ${hot}, orders ${orders}, 2 din me expire hone wale previews ${expiring}, bot kharcha ~₹${(cost / 100).toFixed(2)}.`);
 }
 
+/** Unpaid UPI orders hold stock; release it after 48h so nobody can lock a product by placing fake orders. */
+export async function releaseStaleOrders(env: Env, now = new Date()): Promise<number> {
+  const cutoff = new Date(now.getTime() - 48 * 3600_000).toISOString();
+  const { results } = await env.DB.prepare(
+    "SELECT id, shop_id FROM orders WHERE status = 'placed' AND payment_method = 'upi_manual' AND payment_status = 'pending' AND created_at < ? LIMIT 20",
+  ).bind(cutoff).all<{ id: string; shop_id: string }>();
+  let n = 0;
+  for (const o of results) {
+    const upd = await env.DB.prepare("UPDATE orders SET status = 'cancelled' WHERE id = ? AND shop_id = ? AND status = 'placed' AND payment_status = 'pending'").bind(o.id, o.shop_id).run();
+    if ((upd.meta?.changes ?? 0) === 0) continue;
+    const { results: items } = await env.DB.prepare("SELECT product_id, qty FROM order_items WHERE order_id = ? AND shop_id = ?").bind(o.id, o.shop_id).all<{ product_id: string; qty: number }>();
+    for (const it of items) await env.DB.prepare("UPDATE products SET stock = stock + ? WHERE id = ? AND shop_id = ?").bind(it.qty, it.product_id, o.shop_id).run();
+    await env.DB.prepare("INSERT INTO order_events (id, order_id, shop_id, at, type, detail) VALUES (?,?,?,?,?,?)").bind(newId(), o.id, o.shop_id, now.toISOString(), "cancelled", "auto: unpaid for 48h").run();
+    n++;
+  }
+  return n;
+}
+
 export async function runScheduled(env: Env, now = new Date()): Promise<void> {
   await expirePreviews(env, now);
+  await releaseStaleOrders(env, now);
   await scoreLeads(env, now);
   // 21:00 IST = 15:30 UTC
   if (now.getUTCHours() === 15) await dailyDigest(env, now);

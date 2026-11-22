@@ -80,7 +80,8 @@ function normalize(t: string): string {
   return t.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-const STOP_RE = /^(stop|unsubscribe|band karo|band kar do|rok do|mat bhejo|nahi chahiye)\b/;
+// STOP in English, Hinglish and the main Indian scripts. "nahi chahiye" only counts when it is the whole message.
+const STOP_RE = /^(stop|unsubscribe|band karo|band kar do|rok do|mat bhejo)\b|^nahi chahiye$|^(रोको|बंद करो|बंद कर दो|मत भेजो|नहीं चाहिए|थांबवा|थांबा|બંધ કરો|બંધ|বন্ধ করো|বন্ধ করুন|நிறுத்து|நிறுத்துங்கள்|ఆపండి|ఆపు|ನಿಲ್ಲಿಸಿ|നിർത്തൂ|നിർത്തുക|ਬੰਦ ਕਰੋ|روکیں|بند کریں)/;
 const GREET_RE = /^(hi|hello|hey|namaste|namaskar|start|hii+|help me)\b|\bmenu\b/;
 const FRUSTRATION_RE = /(bekar|bakwas|kaam nahi kar|nahi chal raha|bug|error|dhokha|fraud|paise wapas|refund)/;
 const CHANGE_RE = /(badal|change|hatao|hata do|lagao|laga do|add kar|bada karo|chhota karo|naya design)/;
@@ -123,21 +124,27 @@ async function localize(env: Env, shop: Shop | undefined, lang: BotLang, replies
   const ai = getAiProvider(env);
   const out: string[] = [];
   for (const r of replies) {
-    const key = `${lang}|${r}`;
-    const hit = translationCache.get(key);
-    if (hit) { out.push(hit); continue; }
-    if (!(await aiBudget(env, shop))) { out.push(r); continue; }
-    try {
-      const { text, usage } = await ai.translate(r, LANG_NAMES[lang]);
-      await recordAi(env, shop.id, usage);
-      if (text) {
-        if (translationCache.size > 500) translationCache.clear();
-        translationCache.set(key, text);
-        out.push(text);
-        continue;
-      }
-    } catch { /* keep English */ }
-    out.push(r);
+    // Links (login tokens!) never go to the AI: translate the text lines only and keep link lines as they are.
+    const lines = r.split("\n");
+    const toTranslate = lines.filter((l) => !/https?:\/\//i.test(l) && l.trim());
+    if (!toTranslate.length) { out.push(r); continue; }
+    const plain = toTranslate.join("\n");
+    const key = `${lang}|${plain}`;
+    let translated = translationCache.get(key);
+    if (!translated && (await aiBudget(env, shop))) {
+      try {
+        const { text, usage } = await ai.translate(plain, LANG_NAMES[lang]);
+        await recordAi(env, shop.id, usage);
+        if (text) {
+          if (translationCache.size > 500) translationCache.clear();
+          translationCache.set(key, text);
+          translated = text;
+        }
+      } catch { /* keep English */ }
+    }
+    if (!translated) { out.push(r); continue; }
+    const links = lines.filter((l) => /https?:\/\//i.test(l));
+    out.push([translated, ...links].join("\n"));
   }
   return out;
 }
@@ -145,8 +152,14 @@ async function localize(env: Env, shop: Shop | undefined, lang: BotLang, replies
 /** Main entry. Returns replies to send; all side effects (DB, alerts) happen here. The bot answers in the seller's own language. */
 export async function handleIncoming(env: Env, msg: Incoming, baseUrl: string): Promise<string[]> {
   const phone = msg.from.replace(/\D/g, "").slice(-10);
-  const ctx = await resolve(env, phone);
   const kind = msg.type === "text" ? "text" : msg.type;
+
+  // STOP is honoured by phone number, before anything else, even for numbers that have no shop yet.
+  if (msg.type === "text" && STOP_RE.test(normalize(msg.text))) {
+    await env.DB.prepare("UPDATE consents SET revoked_at = ? WHERE phone = ? AND revoked_at IS NULL").bind(nowIso(), phone).run();
+    await env.DB.prepare("UPDATE leads SET stage = 'lost' WHERE substr(phone, -10) = ? AND stage != 'paid'").bind(phone).run();
+  }
+  const ctx = await resolve(env, phone);
 
   if (ctx.kind === "unknown") {
     await telegram(env, `Unknown number messaged on WhatsApp (…${phone.slice(-4)}): "${msg.text.slice(0, 80)}"`);
@@ -160,7 +173,7 @@ export async function handleIncoming(env: Env, msg: Incoming, baseUrl: string): 
   let text = normalize(devanagariToRules(msg.text));
 
   // STOP works everywhere and first: revoke consent, mark lost, never message again.
-  if (msg.type === "text" && STOP_RE.test(text)) {
+  if (msg.type === "text" && (STOP_RE.test(text) || STOP_RE.test(normalize(msg.text)))) {
     await logMsg(env, ctx, "in", "text", msg.text, msg.id);
     await env.DB.prepare("UPDATE consents SET revoked_at = ? WHERE phone = ? AND revoked_at IS NULL").bind(nowIso(), phone).run();
     if (ctx.leadId) await env.DB.prepare("UPDATE leads SET stage = 'lost' WHERE id = ? AND stage != 'paid'").bind(ctx.leadId).run();

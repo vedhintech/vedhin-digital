@@ -23,8 +23,15 @@ storefront.use("/s/:slug/api/*", sameOrigin);
 const PRODUCT_COLS =
   "p.id, p.name, p.description, p.category, p.price, p.mrp, p.stock, p.sold_out, p.attributes_json, (SELECT url FROM product_images WHERE product_id = p.id AND shop_id = p.shop_id ORDER BY sort LIMIT 1) AS image";
 
-async function logView(c: { env: AppBindings["Bindings"] }, shopId: string, status: string, type: string, meta: object) {
+const lastView = new Map<string, number>();
+async function logView(c: { env: AppBindings["Bindings"]; req: { raw: Request } }, shopId: string, status: string, type: string, meta: object) {
   if (status !== "preview") return;
+  // One analytics write per visitor and page per 5 minutes: crawlers cannot burn the DB write budget or fake "hot" scores.
+  const k = `${clientIp(c.req.raw)}|${shopId}|${JSON.stringify(meta)}`;
+  const now = Date.now();
+  if (now - (lastView.get(k) ?? 0) < 5 * 60_000) return;
+  if (lastView.size > 2000) lastView.clear();
+  lastView.set(k, now);
   try {
     await c.env.DB.prepare("INSERT INTO preview_events (id, shop_id, at, type, meta_json) VALUES (?,?,?,?,?)")
       .bind(newId(), shopId, new Date().toISOString(), type, JSON.stringify(meta))

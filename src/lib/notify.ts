@@ -1,9 +1,13 @@
 import type { Env } from "../types";
 
+/** Plain logs never carry full phone numbers or email addresses. */
+const maskPhones = (t: string) => t.replace(/\d{6,}/g, (m) => "…" + m.slice(-4));
+const maskEmail = (e: string) => e.replace(/^(.).*(@.*)$/, "$1***$2");
+
 /** Founder alerts via Telegram. No-op (logged) when not configured. Never throws. */
 export async function telegram(env: Env, text: string): Promise<boolean> {
   if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) {
-    console.log("[telegram:stub]", text);
+    console.log("[telegram:stub]", maskPhones(text));
     return false;
   }
   try {
@@ -22,7 +26,7 @@ export async function telegram(env: Env, text: string): Promise<boolean> {
 export async function email(env: Env, to: string | null | undefined, subject: string, text: string): Promise<boolean> {
   if (!to) return false;
   if (!env.RESEND_API_KEY || !env.MAIL_FROM) {
-    console.log("[email:stub]", to, subject);
+    console.log("[email:stub]", maskEmail(to), subject);
     return false;
   }
   try {
