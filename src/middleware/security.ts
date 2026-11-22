@@ -8,12 +8,12 @@ export const sameOrigin: MiddlewareHandler<AppBindings> = async (c, next) => {
   const origin = c.req.header("origin") ?? c.req.header("referer");
   if (origin) {
     try {
-      if (new URL(origin).host !== new URL(c.req.url).host) return c.text("Request allowed nahi hai.", 403);
+      if (new URL(origin).host !== new URL(c.req.url).host) return c.text("This request is not allowed.", 403);
     } catch {
-      return c.text("Request allowed nahi hai.", 403);
+      return c.text("This request is not allowed.", 403);
     }
   } else if (c.env.APP_ENV === "production") {
-    return c.text("Request allowed nahi hai.", 403);
+    return c.text("This request is not allowed.", 403);
   }
   return next();
 };

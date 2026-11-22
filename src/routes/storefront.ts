@@ -178,7 +178,7 @@ storefront.post("/s/:slug/api/orders", async (c) => {
     for (const x of reserved) await c.env.DB.prepare("UPDATE products SET stock = stock + ? WHERE id = ? AND shop_id = ?").bind(x.qty, x.id, shop.id).run();
     return c.json({ error: tt(c, "errSomething") }, 500);
   }
-  await notifySeller(c.env, shop as never, `Naya order #${number}`, `${d.name}, ${d.city}. Total ₹${subtotal}. Payment: ${d.payment_method === "cod" ? "COD" : "UPI (UTR ka intezar)"}. Portal me dekhein.`);
+  await notifySeller(c.env, shop as never, `New order #${number}`, `${d.name}, ${d.city}. Total ₹${subtotal}. Payment: ${d.payment_method === "cod" ? "COD" : "UPI (waiting for UTR)"}. Open the portal to see it.`);
   const k = await trackKey(c.env, shop.id, number);
   return c.json({ ok: true, number, url: `/s/${shop.slug}/order/${number}?k=${k}` }, 201);
 });
@@ -206,7 +206,7 @@ storefront.post("/s/:slug/api/orders/:number/proof", async (c) => {
   if (dup) return c.json({ error: tt(c, "errBadUtr") }, 400);
   await c.env.DB.prepare("UPDATE orders SET utr = ?, payment_status = 'proof_uploaded' WHERE id = ? AND shop_id = ?").bind(body.data.utr, o.id, shop.id).run();
   await c.env.DB.prepare("INSERT INTO order_events (id, order_id, shop_id, at, type, detail) VALUES (?,?,?,?,?,?)").bind(newId(), o.id, shop.id, new Date().toISOString(), "proof", body.data.utr).run();
-  await notifySeller(c.env, shop as never, `Order #${number}: payment ka UTR aaya`, `UTR ${body.data.utr}, ₹${o.total}. Bank me paisa dekh kar portal me "Payment confirm" karein.`);
+  await notifySeller(c.env, shop as never, `Order #${number}: UTR received`, `UTR ${body.data.utr}, ₹${o.total}. Check your bank, then confirm the payment in the portal.`);
   return c.json({ ok: true });
 });
 

@@ -66,7 +66,7 @@ export async function dailyDigest(env: Env, now = new Date()): Promise<void> {
   const orders = await q("SELECT COUNT(*) n FROM orders WHERE substr(created_at,1,10) = ?", day);
   const expiring = await q("SELECT COUNT(*) n FROM shops WHERE status = 'preview' AND expires_at IS NOT NULL AND expires_at < ?", new Date(now.getTime() + 2 * DAY).toISOString());
   const cost = await q("SELECT COALESCE(SUM(est_cost_paise),0) n FROM bot_usage WHERE day = ?", day);
-  await telegram(env, `Aaj ka digest: naye leads ${newLeads}, hot ${hot}, orders ${orders}, 2 din me expire hone wale previews ${expiring}, bot kharcha ~₹${(cost / 100).toFixed(2)}.`);
+  await telegram(env, `Daily digest: new leads ${newLeads}, hot leads ${hot}, orders ${orders}, previews expiring in 2 days ${expiring}, bot cost about ₹${(cost / 100).toFixed(2)}.`);
 }
 
 /** Unpaid UPI orders hold stock; release it after 48h so nobody can lock a product by placing fake orders. */
