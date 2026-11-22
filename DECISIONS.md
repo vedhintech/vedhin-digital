@@ -21,3 +21,9 @@
 - Cron cancels unpaid UPI orders after 48h and restores stock.
 - Stub logs mask phone numbers and emails. Preview view analytics throttled to 1 write per visitor/page/5 min.
 - Open items: admin 2FA (recommend Cloudflare Access in front of /admin, free), atomic order creation via DB.batch, magic-byte check + WebP conversion for uploads (needs R2), CSP/HSTS headers.
+
+## 2026-11-22: Remaining hardening
+- Admin login = password + TOTP (WebCrypto, no paid service). In production the panel refuses to open without `ADMIN_TOTP_SECRET` and shows a one-time setup key instead. Login attempts are limited with a D1-backed counter (migration 0004), which holds across Worker instances.
+- Order, items and event are saved in one `DB.batch` (atomic). Max 12 distinct items per cart. A UTR can back only one order per shop.
+- CSP, HSTS, Permissions-Policy added. Upload type decided by magic bytes. `OUTREACH_CAP` is now a variable.
+- WebP conversion skipped: needs paid Cloudflare Images.

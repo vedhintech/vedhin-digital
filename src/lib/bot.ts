@@ -1,3 +1,4 @@
+import { sniffImage } from "./seller";
 import type { Env, Shop } from "../types";
 import { newId } from "./id";
 import { PRICING } from "../i18n/hinglish";
@@ -109,8 +110,10 @@ async function recordAi(env: Env, shopId: string, u: { inputTokens: number; outp
 }
 
 async function savePhoto(env: Env, shopId: string, bytes: ArrayBuffer, mime: string): Promise<string | null> {
-  if (!env.MEDIA) return null;
-  const ext = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
+  if (!env.MEDIA || bytes.byteLength === 0 || bytes.byteLength > 5 * 1024 * 1024) return null;
+  const ext = sniffImage(new Uint8Array(bytes)); // trust the bytes, not the declared mime
+  if (!ext) return null;
+  mime = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
   const key = `shops/${shopId}/${newId()}.${ext}`;
   await env.MEDIA.put(key, bytes, { httpMetadata: { contentType: mime } });
   return `/media/${key}`;

@@ -80,7 +80,7 @@ storefront.get("/s/:slug/api/products/:id", async (c) => {
 });
 
 // ---------- Cart pricing (server is the source of truth for prices) ----------
-const itemsSchema = z.array(z.object({ id: z.string().min(1).max(40), qty: z.number().int().min(1).max(10) })).min(1).max(20);
+const itemsSchema = z.array(z.object({ id: z.string().min(1).max(40), qty: z.number().int().min(1).max(10) })).min(1).max(12);
 
 async function priceLines(c: Context<AppBindings>, shopId: string, items: z.infer<typeof itemsSchema>) {
   const lines = [];
@@ -159,27 +159,25 @@ storefront.post("/s/:slug/api/orders", async (c) => {
   let number = 0;
   for (let attempt = 0; attempt < 4 && !number; attempt++) {
     try {
-      await c.env.DB.prepare(
-        `INSERT INTO orders (id, shop_id, number, created_at, buyer_name, buyer_phone, address, pincode, city, subtotal, shipping, total, payment_method, payment_status, status)
-         VALUES (?,?,(SELECT COALESCE(MAX(number),0)+1 FROM orders WHERE shop_id = ?),?,?,?,?,?,?,?,0,?,?,?,?)`,
-      )
-        .bind(orderId, shop.id, shop.id, now, d.name, d.phone, d.address, d.pincode, d.city, subtotal, subtotal, d.payment_method, payStatus, status)
-        .run();
-      const row = await c.env.DB.prepare("SELECT number FROM orders WHERE id = ?").bind(orderId).first<{ number: number }>();
+      // One atomic batch: order + items + event are saved together or not at all.
+      await c.env.DB.batch([
+        c.env.DB.prepare(
+          `INSERT INTO orders (id, shop_id, number, created_at, buyer_name, buyer_phone, address, pincode, city, subtotal, shipping, total, payment_method, payment_status, status)
+           VALUES (?,?,(SELECT COALESCE(MAX(number),0)+1 FROM orders WHERE shop_id = ?),?,?,?,?,?,?,?,0,?,?,?,?)`,
+        ).bind(orderId, shop.id, shop.id, now, d.name, d.phone, d.address, d.pincode, d.city, subtotal, subtotal, d.payment_method, payStatus, status),
+        ...lines.map((l) => c.env.DB.prepare("INSERT INTO order_items (id, order_id, shop_id, product_id, name, qty, price) VALUES (?,?,?,?,?,?,?)").bind(newId(), orderId, shop.id, l.id, l.name, l.qty, l.price)),
+        c.env.DB.prepare("INSERT INTO order_events (id, order_id, shop_id, at, type, detail) VALUES (?,?,?,?,?,?)").bind(newId(), orderId, shop.id, now, "placed", d.payment_method),
+      ]);
+      const row = await c.env.DB.prepare("SELECT number FROM orders WHERE id = ? AND shop_id = ?").bind(orderId, shop.id).first<{ number: number }>();
       number = row?.number ?? 0;
     } catch {
-      /* unique(shop_id, number) collision: retry */
+      /* unique(shop_id, number) collision or transient error: the batch rolled back, retry */
     }
   }
   if (!number) {
     for (const x of reserved) await c.env.DB.prepare("UPDATE products SET stock = stock + ? WHERE id = ? AND shop_id = ?").bind(x.qty, x.id, shop.id).run();
     return c.json({ error: tt(c, "errSomething") }, 500);
   }
-  for (const l of lines) {
-    await c.env.DB.prepare("INSERT INTO order_items (id, order_id, shop_id, product_id, name, qty, price) VALUES (?,?,?,?,?,?,?)").bind(newId(), orderId, shop.id, l.id, l.name, l.qty, l.price).run();
-  }
-  await c.env.DB.prepare("INSERT INTO order_events (id, order_id, shop_id, at, type, detail) VALUES (?,?,?,?,?,?)").bind(newId(), orderId, shop.id, now, "placed", d.payment_method).run();
-
   await notifySeller(c.env, shop as never, `Naya order #${number}`, `${d.name}, ${d.city}. Total ₹${subtotal}. Payment: ${d.payment_method === "cod" ? "COD" : "UPI (UTR ka intezar)"}. Portal me dekhein.`);
   const k = await trackKey(c.env, shop.id, number);
   return c.json({ ok: true, number, url: `/s/${shop.slug}/order/${number}?k=${k}` }, 201);
@@ -203,6 +201,9 @@ storefront.post("/s/:slug/api/orders/:number/proof", async (c) => {
   if (!timingSafeEqual(body.data.k, await trackKey(c.env, shop.id, number))) return c.json({ error: tt(c, "errLinkInvalid") }, 403);
   const o = await loadOrder(c, shop.id, number);
   if (!o || o.payment_method !== "upi_manual" || !["pending", "proof_uploaded", "rejected"].includes(o.payment_status)) return c.json({ error: tt(c, "errNoPayment") }, 400);
+  // The same UTR cannot back two orders in one shop (stops reusing one payment for many orders).
+  const dup = await c.env.DB.prepare("SELECT 1 x FROM orders WHERE shop_id = ? AND utr = ? AND id != ?").bind(shop.id, body.data.utr, o.id).first();
+  if (dup) return c.json({ error: tt(c, "errBadUtr") }, 400);
   await c.env.DB.prepare("UPDATE orders SET utr = ?, payment_status = 'proof_uploaded' WHERE id = ? AND shop_id = ?").bind(body.data.utr, o.id, shop.id).run();
   await c.env.DB.prepare("INSERT INTO order_events (id, order_id, shop_id, at, type, detail) VALUES (?,?,?,?,?,?)").bind(newId(), o.id, shop.id, new Date().toISOString(), "proof", body.data.utr).run();
   await notifySeller(c.env, shop as never, `Order #${number}: payment ka UTR aaya`, `UTR ${body.data.utr}, ₹${o.total}. Bank me paisa dekh kar portal me "Payment confirm" karein.`);

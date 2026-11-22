@@ -6,6 +6,10 @@ import { resolve } from "node:path";
 class Stmt {
   private params: unknown[] = [];
   constructor(private db: Database.Database, private sql: string) {}
+  exec() {
+    const r = this.db.prepare(this.sql).run(...this.params);
+    return { success: true, meta: { changes: r.changes } };
+  }
   bind(...p: unknown[]) {
     this.params = p;
     return this;
@@ -28,6 +32,10 @@ export function makeDb() {
   for (const f of readdirSync(dir).filter((x) => x.endsWith(".sql")).sort()) db.exec(readFileSync(resolve(dir, f), "utf8"));
   return {
     raw: db,
-    d1: { prepare: (sql: string) => new Stmt(db, sql) } as unknown as D1Database,
+    d1: {
+      prepare: (sql: string) => new Stmt(db, sql),
+      // D1 batch = one atomic transaction.
+      batch: async (stmts: Stmt[]) => db.transaction(() => stmts.map((s) => s.exec()))(),
+    } as unknown as D1Database,
   };
 }

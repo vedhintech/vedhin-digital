@@ -21,7 +21,7 @@ describe("admin auth", () => {
     expect((await c.req("/admin")).status).toBe(302);
     const bad = () => c.req("/admin/login", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "password=nope" });
     expect((await bad()).status).toBe(401);
-    for (let i = 0; i < 5; i++) await bad();
+    for (let i = 0; i < 8; i++) await bad();
     expect((await bad()).status).toBe(429);
   });
   it("seller cookie does not grant admin", async () => {

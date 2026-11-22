@@ -5,7 +5,8 @@ import type { AppBindings } from "../types";
 import { sameOrigin } from "../middleware/security";
 import { signSession, verifySession, timingSafeEqual } from "../lib/auth";
 import { secretOf } from "../lib/secret";
-import { rateLimit, clientIp } from "../lib/rate";
+import { rateLimit, dbRateLimit, clientIp } from "../lib/rate";
+import { verifyTotp, newTotpSecret } from "../lib/totp";
 import { newId } from "../lib/id";
 import { parseCsv } from "../lib/csv";
 import { buildDemoShop, type LeadRow } from "../lib/demo";
@@ -20,7 +21,8 @@ admin.use("/admin/*", sameOrigin);
 const COOKIE = "vd_admin";
 export const STAGES = ["new", "called", "permission", "demo_sent", "editing", "hot", "paid", "stalled", "lost"] as const;
 const STAGE_LABEL: Record<string, string> = { new: "New", called: "Called", permission: "Permission", demo_sent: "Demo sent", editing: "Editing", hot: "Hot", paid: "Paid", stalled: "Stalled", lost: "Lost" };
-export const OUTREACH_CAP = 30;
+export const DEFAULT_OUTREACH_CAP = 30;
+export const outreachCap = (env: { OUTREACH_CAP?: string }) => Math.max(1, Math.min(100, Number(env.OUTREACH_CAP) || DEFAULT_OUTREACH_CAP));
 
 function page(title: string, body: Raw | string, flash?: { m?: string; e?: string }): string {
   const nav = ["", "shops", "outreach", "stats", "bot-usage", "audit"].map((p) => `<a href="/admin${p ? "/" + p : ""}">${{ "": "Leads", shops: "Shops", outreach: "Outreach", stats: "Stats", "bot-usage": "Bot cost", audit: "Audit" }[p]}</a>`).join("");
@@ -33,16 +35,33 @@ function page(title: string, body: Raw | string, flash?: { m?: string; e?: strin
 const fl = (c: { req: { query: (k: string) => string | undefined } }) => ({ m: c.req.query("m"), e: c.req.query("e") });
 const go = (path: string, m?: string, e?: string) => `${path}${m ? `?m=${encodeURIComponent(m)}` : e ? `?e=${encodeURIComponent(e)}` : ""}`;
 
-// ---------- login ----------
-function loginHtml(error?: string) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin login</title><meta name="robots" content="noindex"><style>${CSS}</style></head><body><div class="w" style="padding-top:48px"><h1>Vedhin Admin</h1>${error ? `<div class="msg e" role="alert">${esc(error)}</div>` : ""}<form class="card" method="post" action="/admin/login"><label for="pw">Password</label><input id="pw" name="password" type="password" autocomplete="current-password" required><p><button class="btn big">Login</button></p></form></div></body></html>`;
+// ---------- login (password + authenticator code) ----------
+function loginHtml(error?: string, needCode = true) {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin login</title><meta name="robots" content="noindex"><style>${CSS}</style></head><body><div class="w" style="padding-top:48px"><h1>Vedhin Admin</h1>${error ? `<div class="msg e" role="alert">${esc(error)}</div>` : ""}<form class="card" method="post" action="/admin/login"><label for="pw">Password</label><input id="pw" name="password" type="password" autocomplete="current-password" required>${needCode ? `<label for="code">Authenticator code</label><input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="6-digit code">` : ""}<p><button class="btn big">Login</button></p></form></div></body></html>`;
 }
-admin.get("/admin/login", (c) => c.html(loginHtml()));
+function setupHtml(secret: string) {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Set up 2-step login</title><meta name="robots" content="noindex"><style>${CSS}</style></head><body><div class="w" style="padding-top:32px"><h1>Set up 2-step login</h1>
+<div class="card"><p>Your password is correct, but 2-step login is not switched on yet.</p>
+<ol><li>Open Google Authenticator (or Authy) and add an account with "Enter a setup key".</li><li>Setup key: <strong style="font-size:20px;letter-spacing:2px;word-break:break-all">${esc(secret)}</strong></li>
+<li>In Cloudflare, open your Worker, then Settings, Variables and Secrets. Add a secret named <code>ADMIN_TOTP_SECRET</code> with the same key. Save and deploy.</li><li>Come back here and log in with the password plus the 6-digit code.</li></ol>
+<p class="muted">This key is shown only on this page. Refreshing creates a new one.</p></div></div></body></html>`;
+}
+admin.get("/admin/login", (c) => c.html(loginHtml(undefined, !!c.env.ADMIN_TOTP_SECRET)));
 admin.post("/admin/login", async (c) => {
-  if (!c.env.ADMIN_PASSWORD) return c.html(loginHtml("ADMIN_PASSWORD is not set yet (run: wrangler secret put ADMIN_PASSWORD)."), 503);
-  if (!rateLimit(`adminlogin:${clientIp(c.req.raw)}`, 5, 10 * 60_000)) return c.html(loginHtml("Too many attempts. Try again in 10 minutes."), 429);
-  const pw = String((await c.req.parseBody()).password ?? "");
-  if (!timingSafeEqual(pw, c.env.ADMIN_PASSWORD)) return c.html(loginHtml("Wrong password."), 401);
+  if (!c.env.ADMIN_PASSWORD) return c.html(loginHtml("ADMIN_PASSWORD is not set yet (run: wrangler secret put ADMIN_PASSWORD).", false), 503);
+  // Durable limiter (shared across all Worker instances): 8 attempts per 15 minutes per IP, and 20 per hour overall.
+  const ip = clientIp(c.req.raw);
+  if (!(await dbRateLimit(c.env.DB, `adminlogin:${ip}`, 8, 15 * 60_000)) || !(await dbRateLimit(c.env.DB, "adminlogin:all", 20, 60 * 60_000)))
+    return c.html(loginHtml("Too many attempts. Try again later.", !!c.env.ADMIN_TOTP_SECRET), 429);
+  const form = await c.req.parseBody();
+  const pw = String(form.password ?? "");
+  if (!timingSafeEqual(pw, c.env.ADMIN_PASSWORD)) return c.html(loginHtml("Wrong password or code.", !!c.env.ADMIN_TOTP_SECRET), 401);
+  if (!c.env.ADMIN_TOTP_SECRET) {
+    // Production refuses to open the panel without 2-step login; show a one-time setup key instead of a session.
+    if (c.env.APP_ENV === "production") return c.html(setupHtml(newTotpSecret()));
+  } else if (!(await verifyTotp(c.env.ADMIN_TOTP_SECRET, String(form.code ?? "").trim()))) {
+    return c.html(loginHtml("Wrong password or code.", true), 401);
+  }
   const s = await signSession({ role: "admin", id: "founder", exp: Math.floor(Date.now() / 1000) + 7 * 86400 }, secretOf(c.env));
   setCookie(c, COOKIE, s, { httpOnly: true, secure: c.env.APP_ENV === "production", sameSite: "Strict", path: "/", maxAge: 7 * 86400 });
   return c.redirect("/admin");
@@ -174,7 +193,7 @@ admin.get("/admin/leads/:id", async (c) => {
 <div class="card"><strong>Demo website</strong>${shop ? html`<p><a href="/s/${shop.slug}" target="_blank">${origin}/s/${shop.slug}</a> (${shop.status}, ${views} views)</p>` : html`<p class="muted">Not built yet.</p><form method="post" action="/admin/leads/${l.id}/build-demo"><button class="btn">Build demo website</button></form>`}</div>
 <div class="card"><strong>Permission after the call</strong><form method="post" action="/admin/leads/${l.id}/consent"><div class="inl"><select name="decision"><option value="yes">Yes, WhatsApp is allowed</option><option value="no">No, not interested</option></select><input name="note" placeholder="What the seller said" maxlength="200"><button class="btn">Save</button></div></form>
 ${consents.map((x) => html`<div class="muted">${x.granted_at.slice(0, 16)} | ${x.channel} | ${x.note ?? ""} ${x.revoked_at ? html`<span class="chip r">revoked</span>` : ""}</div>`)}</div>
-<div class="card"><strong>Send WhatsApp</strong><p class="muted">Only after permission, max ${OUTREACH_CAP} per day, with a STOP line.</p><form method="post" action="/admin/leads/${l.id}/send-whatsapp"><button class="btn" ${hasConsent && shop ? "" : "disabled"}>Send preview link</button></form></div>
+<div class="card"><strong>Send WhatsApp</strong><p class="muted">Only after permission, max ${outreachCap(c.env)} per day, with a STOP line.</p><form method="post" action="/admin/leads/${l.id}/send-whatsapp"><button class="btn" ${hasConsent && shop ? "" : "disabled"}>Send preview link</button></form></div>
 <div class="card"><strong>Seller login link</strong><p class="muted">Use after the seller pays or to show a demo. Send it on WhatsApp.</p><form method="post" action="/admin/leads/${l.id}/login-link"><button class="btn s" ${shop && l.phone ? "" : "disabled"}>Create new login link</button></form></div>
 <div class="card"><strong>Stage aur notes</strong><form method="post" action="/admin/leads/${l.id}/stage"><div class="inl"><select name="stage">${STAGES.map((s) => html`<option value="${s}" ${l.stage === s ? "selected" : ""}>${STAGE_LABEL[s]}</option>`)}</select><button class="btn s">Stage badlein</button></div></form>
 <form method="post" action="/admin/leads/${l.id}/note"><textarea name="notes" maxlength="1000">${l.notes ?? ""}</textarea><p><button class="btn s">Notes save</button></p></form></div>
@@ -227,7 +246,8 @@ admin.post("/admin/leads/:id/send-whatsapp", async (c) => {
   if (!l.shop_id) return back(undefined, "Pehle demo website banayein.");
   const today = new Date().toISOString().slice(0, 10);
   const sent = (await c.env.DB.prepare("SELECT COUNT(*) n FROM outreach_queue WHERE substr(created_at,1,10) = ? AND status IN ('sent','queued_stub')").bind(today).first<{ n: number }>())?.n ?? 0;
-  if (sent >= OUTREACH_CAP) return back(undefined, `Today's limit (${OUTREACH_CAP}) is reached. Send tomorrow.`);
+  const cap = outreachCap(c.env);
+  if (sent >= cap) return back(undefined, `Today's limit (${cap}) is reached. Send tomorrow.`);
   const shop = await c.env.DB.prepare("SELECT slug, name FROM shops WHERE id = ?").bind(l.shop_id).first<{ slug: string; name: string }>();
   if (!shop) return back(undefined, "Shop not found.");
   const link = `${new URL(c.req.url).origin}/s/${shop.slug}`;
@@ -291,7 +311,7 @@ admin.get("/admin/outreach", async (c) => {
   const { results } = await c.env.DB.prepare("SELECT q.status, q.created_at, l.business_name, l.id lid FROM outreach_queue q JOIN leads l ON l.id = q.lead_id ORDER BY q.created_at DESC LIMIT 100").all<{ status: string; created_at: string; business_name: string; lid: string }>();
   const today = new Date().toISOString().slice(0, 10);
   const n = results.filter((r) => r.created_at.startsWith(today)).length;
-  return c.html(page("Outreach", html`<h1>Outreach</h1><div class="card">Aaj: <strong>${n}</strong> / ${OUTREACH_CAP}</div><table><tbody>${results.map((r) => html`<tr><td><a href="/admin/leads/${r.lid}">${r.business_name}</a></td><td>${r.created_at.slice(0, 16)}</td><td>${r.status}</td></tr>`)}</tbody></table>`));
+  return c.html(page("Outreach", html`<h1>Outreach</h1><div class="card">Aaj: <strong>${n}</strong> / ${outreachCap(c.env)}</div><table><tbody>${results.map((r) => html`<tr><td><a href="/admin/leads/${r.lid}">${r.business_name}</a></td><td>${r.created_at.slice(0, 16)}</td><td>${r.status}</td></tr>`)}</tbody></table>`));
 });
 
 admin.get("/admin/stats", async (c) => {

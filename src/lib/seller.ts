@@ -62,13 +62,23 @@ export function attrsFromForm(category: string | null, form: Record<string, unkn
 
 export const PRODUCT_LIMIT = (plan: string | null) => (plan === "support" ? 200 : 20);
 
+/** Detects jpg/png/webp from magic bytes (never trust the client-declared type). */
+export function sniffImage(b: Uint8Array): "jpg" | "png" | "webp" | null {
+  if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "jpg";
+  if (b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "png";
+  if (b.length > 12 && String.fromCharCode(...b.slice(0, 4)) === "RIFF" && String.fromCharCode(...b.slice(8, 12)) === "WEBP") return "webp";
+  return null;
+}
+
 /** Stores an uploaded image in R2 when available. Returns public path or null. */
 export async function saveImage(env: Env, shopId: string, file: File): Promise<string | null> {
   if (!env.MEDIA) return null;
   const types: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
   const ext = types[file.type];
   if (!ext || file.size > 5 * 1024 * 1024 || file.size === 0) return null;
+  const buf = await file.arrayBuffer();
+  if (sniffImage(new Uint8Array(buf)) !== ext) return null; // the real bytes must match the declared type
   const key = `shops/${shopId}/${newId()}.${ext}`;
-  await env.MEDIA.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
+  await env.MEDIA.put(key, buf, { httpMetadata: { contentType: file.type } });
   return `/media/${key}`;
 }

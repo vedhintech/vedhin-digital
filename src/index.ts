@@ -11,6 +11,8 @@ import { t } from "./i18n/hinglish";
 
 const app = new Hono<AppBindings>();
 
+app.use("*", securityHeaders);
+
 app.get("/health", async (c) => {
   const row = await c.env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
   return c.json({ status: "ok", db: row?.ok === 1, env: c.env.APP_ENV, time: new Date().toISOString() });
@@ -18,7 +20,6 @@ app.get("/health", async (c) => {
 
 app.get("/", (c) => c.json({ name: "Vedhin Digital", message: "Platform is running." }));
 
-app.use("*", securityHeaders);
 app.route("/", storefront);
 app.route("/", media);
 app.route("/", seller);

@@ -5,6 +5,8 @@ export interface Env {
   AI_PROVIDER: string;
   SESSION_SECRET?: string;
   ADMIN_PASSWORD?: string;
+  ADMIN_TOTP_SECRET?: string;
+  OUTREACH_CAP?: string;
   GEMINI_API_KEY?: string;
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_CHAT_ID?: string;

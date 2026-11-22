@@ -23,4 +23,8 @@ export const securityHeaders: MiddlewareHandler<AppBindings> = async (c, next) =
   c.header("X-Content-Type-Options", "nosniff");
   c.header("Referrer-Policy", "strict-origin-when-cross-origin");
   c.header("X-Frame-Options", "SAMEORIGIN");
+  c.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  // Pages use inline styles/scripts we ship ourselves; no third-party scripts. Fonts come from Google Fonts only.
+  c.header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'");
+  if (c.env.APP_ENV === "production") c.header("Strict-Transport-Security", "max-age=31536000");
 };

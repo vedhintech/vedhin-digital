@@ -16,7 +16,7 @@ Done-for-you online shops for small sellers (ladies dress + jewellery, Jodhpur/J
 ```
 npm install
 npm run preview      # demo shops + seller login link + admin (password: admin) on http://localhost:8799
-npm test             # 67 tests
+npm test             # 93 tests
 npm run typecheck
 ```
 
@@ -27,6 +27,8 @@ npm run typecheck
 4. Set secrets (Worker, Settings, Variables and Secrets, type "Secret"). Never commit them:
    - `SESSION_SECRET`: long random string (required)
    - `ADMIN_PASSWORD`: your admin password (required for /admin)
+   - `ADMIN_TOTP_SECRET`: 2-step login key. First log in with only the password: the page shows a setup key. Add it to Google Authenticator and save the same key here.
+   - Optional variable `OUTREACH_CAP` (default 30 WhatsApp messages per day)
    - Later: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_WEBHOOK_SECRET`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`, `GEMINI_API_KEY`, `RESEND_API_KEY`, `MAIL_FROM`
 5. To use Gemini for photo-to-product, set variable `AI_PROVIDER=gemini` (and the key).
 6. Enable R2 in the dashboard, create bucket `vedhin-media`, uncomment the `[[r2_buckets]]` block in `wrangler.toml`. Until then, sellers paste an image link instead of uploading.
@@ -41,7 +43,7 @@ Webhook URL `https://<worker>/webhooks/whatsapp`, verify token = `WHATSAPP_VERIF
 Panel: import leads, "Demo website banayein", call the seller, record permission, "Preview link bhejein" (max 30/day, consent enforced), watch Hot alerts on Telegram, close the call, "Paid mark karein", "Naya login link banayein" and send it on WhatsApp.
 
 ## Known limits (honest list)
-- Admin has a password only; TOTP 2FA is not built yet.
+- Photos are stored as uploaded (type checked by real file bytes, max 5 MB). WebP conversion needs Cloudflare Images (paid), so it is skipped.
 - Bot cannot dispatch orders or read voice notes yet (orders go through the portal; voice needs a speech-to-text provider).
 - No QR image for UPI (UPI app link + UPI ID are shown; seller QR upload is a later add-on).
 - Razorpay/Cashfree auto-payment, live courier tracking API, comment-to-DM and the marketplace are Phase 2 (see `docs/01-PRD.md`).
