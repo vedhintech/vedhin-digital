@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { AppBindings, Shop } from "../types";
 import { sameOrigin } from "../middleware/security";
 import { sha256Hex, signSession, verifySession } from "../lib/auth";
-import { secretOf } from "../lib/secret";
+import { secretOf, isDeployed } from "../lib/secret";
 import { rateLimit, clientIp } from "../lib/rate";
 import { newId } from "../lib/id";
 import { whatsappText } from "../lib/notify";
@@ -17,7 +17,7 @@ export const seller = new Hono<AppBindings>();
 seller.use("/seller/*", sameOrigin);
 
 const SHOP_SELECT = "SELECT id, slug, name, tagline, category, status, expires_at, plan, template_id, theme_json, logo_url, phone, whatsapp, email, maps_url, address, instagram, facebook, youtube, upi_id, upi_qr_url FROM shops WHERE id = ?";
-const secure = (env: AppBindings["Bindings"]) => env.APP_ENV === "production";
+const secure = (env: AppBindings["Bindings"]) => isDeployed(env);
 const SELLER_COOKIE = "vd_seller";
 
 seller.get("/seller/manifest.webmanifest", (c) =>

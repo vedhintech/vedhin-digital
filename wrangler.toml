@@ -19,3 +19,22 @@ crons = ["0 * * * *"]
 [vars]
 APP_ENV = "production"
 AI_PROVIDER = "stub"
+
+# ---------------------------------------------------------------------------
+# Worker Previews (`npx wrangler preview`, used by Workers Builds for non-production branches / PRs).
+# Previews do NOT inherit production settings, so everything a Preview needs is listed here.
+#  - Uses a SEPARATE database (vedhin-db-preview). It must never point at the production vedhin-db.
+#  - No cron triggers or routes (Cloudflare does not allow them in previews, and a preview must not run jobs).
+#  - Secrets are not stored here. Set them once with: npx wrangler preview base-config secret put <NAME>
+#    (SESSION_SECRET, ADMIN_PASSWORD, ADMIN_TOTP_SECRET). Use different values from production.
+#  - APP_ENV = "preview" is treated like production for security (secure cookies, 2-step admin login, HSTS).
+# ---------------------------------------------------------------------------
+[previews.vars]
+APP_ENV = "preview"
+AI_PROVIDER = "stub"
+
+[[previews.d1_databases]]
+binding = "DB"
+database_name = "vedhin-db-preview"
+database_id = "4c192b46-ee66-4511-b029-399270e2ccf2"
+migrations_dir = "migrations"

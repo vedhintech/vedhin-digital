@@ -27,3 +27,8 @@
 - Order, items and event are saved in one `DB.batch` (atomic). Max 12 distinct items per cart. A UTR can back only one order per shop.
 - CSP, HSTS, Permissions-Policy added. Upload type decided by magic bytes. `OUTREACH_CAP` is now a variable.
 - WebP conversion skipped: needs paid Cloudflare Images.
+
+## 2026-11-23: Worker Previews
+- PR builds run `npx wrangler preview` (Workers Builds non-production command), which requires a `previews` block. Added `[previews.vars]` (APP_ENV=preview, AI_PROVIDER=stub) and `[[previews.d1_databases]]` bound to a separate `vedhin-db-preview`. No crons, routes or secrets in previews.
+- `APP_ENV=preview` counts as deployed: secure cookies, mandatory 2-step admin login, HSTS, SESSION_SECRET required (`isDeployed` in `src/lib/secret.ts`).
+- A test guards that the preview DB id differs from the production DB id.

@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { AppBindings } from "../types";
 import { sameOrigin } from "../middleware/security";
 import { signSession, verifySession, timingSafeEqual } from "../lib/auth";
-import { secretOf } from "../lib/secret";
+import { secretOf, isDeployed } from "../lib/secret";
 import { rateLimit, dbRateLimit, clientIp } from "../lib/rate";
 import { verifyTotp, newTotpSecret } from "../lib/totp";
 import { newId } from "../lib/id";
@@ -57,12 +57,12 @@ admin.post("/admin/login", async (c) => {
   if (!timingSafeEqual(pw, c.env.ADMIN_PASSWORD)) return c.html(loginHtml("Wrong password or code.", !!c.env.ADMIN_TOTP_SECRET), 401);
   if (!c.env.ADMIN_TOTP_SECRET) {
     // Production refuses to open the panel without 2-step login; show a one-time setup key instead of a session.
-    if (c.env.APP_ENV === "production") return c.html(setupHtml(newTotpSecret()));
+    if (isDeployed(c.env)) return c.html(setupHtml(newTotpSecret()));
   } else if (!(await verifyTotp(c.env.ADMIN_TOTP_SECRET, String(form.code ?? "").trim()))) {
     return c.html(loginHtml("Wrong password or code.", true), 401);
   }
   const s = await signSession({ role: "admin", id: "founder", exp: Math.floor(Date.now() / 1000) + 7 * 86400 }, secretOf(c.env));
-  setCookie(c, COOKIE, s, { httpOnly: true, secure: c.env.APP_ENV === "production", sameSite: "Strict", path: "/", maxAge: 7 * 86400 });
+  setCookie(c, COOKIE, s, { httpOnly: true, secure: isDeployed(c.env), sameSite: "Strict", path: "/", maxAge: 7 * 86400 });
   return c.redirect("/admin");
 });
 admin.post("/admin/logout", (c) => {

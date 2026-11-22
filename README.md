@@ -54,3 +54,15 @@ Panel: import leads, "Demo website banayein", call the seller, record permission
 - Website is English. Buyers pick a language in the header (11 Indian languages). Dictionaries: `src/i18n/ui-en.ts` (source of truth), `ui-hi.ts`, `ui-in.ts`.
 - Seller bot answers in the seller's language (`src/i18n/bot.ts`). For languages beyond English/Hindi/Hinglish set `AI_PROVIDER=gemini` + `GEMINI_API_KEY`; otherwise replies fall back to English.
 - To add a language: add it to `LANGS` in `src/i18n/index.ts` and a dictionary (missing keys fall back to English).
+
+## Preview deployments (pull requests and non-production branches)
+
+Workers Builds runs `npx wrangler preview` for non-production branches. That command needs the `previews` block in `wrangler.toml`, which is already set up:
+
+- Preview uses its own database, `vedhin-db-preview`. It never touches production `vedhin-db`.
+- Preview has `APP_ENV=preview` and `AI_PROVIDER=stub`, no cron jobs, and no secrets in the repo.
+- Add preview secrets once (use values different from production):
+  `npx wrangler preview base-config secret put SESSION_SECRET`, then `ADMIN_PASSWORD`, then `ADMIN_TOTP_SECRET`.
+  Without them the preview admin login stays closed, which is safe.
+- When you add a migration, apply it to the preview database too: `npx wrangler d1 migrations apply vedhin-db-preview --remote`.
+- The production deploy command stays `npx wrangler deploy` (branch `main`).
