@@ -47,3 +47,9 @@
 
 ## 23 Nov: R2 enabled
 - Bucket `vedhin-media` created (free tier, 10 GB). `MEDIA` binding enabled in wrangler.toml. Photos are saved as uploaded (no WebP conversion; that needs paid Cloudflare Images).
+
+## 23 Nov: photo-to-product in the seller portal
+- The product form now has "Fill name and details from photo". It shrinks the photo in the browser (max 1280 px), calls `/seller/api/draft-from-photo`, and fills empty name/description and the category. The seller still checks and sets the price. Daily AI limit applies.
+- Gemini model `gemini-2.0-flash` was retired by Google (June 2026). Default is now `gemini-3.5-flash-lite`; override with the plain variable `GEMINI_MODEL` if Google retires it again.
+- If Gemini fails, the seller sees a friendly message and types the details.
+- Remaining Hinglish strings in the seller portal replaced with English (rule 9).

@@ -47,7 +47,7 @@ export function getAiProvider(env: Env): AiProvider {
     case "stub":
       return new StubAiProvider();
     case "gemini":
-      return env.GEMINI_API_KEY ? new GeminiProvider(env.GEMINI_API_KEY) : new StubAiProvider();
+      return env.GEMINI_API_KEY ? new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_MODEL || undefined) : new StubAiProvider();
     // A "claude" provider (Haiku) plugs in here later with no other code change.
     default:
       return new StubAiProvider();

@@ -8,6 +8,8 @@ export interface Env {
   ADMIN_TOTP_SECRET?: string;
   OUTREACH_CAP?: string;
   GEMINI_API_KEY?: string;
+  /** Optional override of the Gemini model name (Google retires models; no code change needed). */
+  GEMINI_MODEL?: string;
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_CHAT_ID?: string;
   TELEGRAM_WEBHOOK_SECRET?: string;

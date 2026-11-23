@@ -3,7 +3,7 @@ import type { AiProvider, ProductDraft, UsageInfo } from "./provider";
 /** Gemini (free tier) provider. Only product photos and fixed prompts are sent: never buyer data. */
 export class GeminiProvider implements AiProvider {
   readonly name = "gemini";
-  constructor(private apiKey: string, private model = "gemini-2.0-flash") {}
+  constructor(private apiKey: string, private model = "gemini-3.5-flash-lite") {}
 
   private async call(parts: unknown[]): Promise<{ text: string; usage: UsageInfo }> {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent`, {

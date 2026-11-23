@@ -154,7 +154,7 @@ seller.get("/seller/products/:id", async (c) => {
   try { attrs = JSON.parse((p.attributes_json as string) || "{}"); } catch { /* ignore */ }
   const body = html`<h1>Edit product</h1><form class="card" method="post" action="/seller/products/${p.id as string}" enctype="multipart/form-data">${productForm(shop, p, attrs)}<p><button class="btn big">Save</button></p></form>
 <form method="post" action="/seller/products/${p.id as string}/soldout"><button class="btn s big">${p.sold_out ? "Mark as available" : "Mark as sold out"}</button></form>
-<form method="post" action="/seller/products/${p.id as string}/delete" style="margin-top:12px"><button class="btn er big">Product hatayein</button></form>`;
+<form method="post" action="/seller/products/${p.id as string}/delete" style="margin-top:12px"><button class="btn er big">Remove product</button></form>`;
   return c.html(portal(shop, "products", "Product", body, flash(c)));
 });
 
@@ -182,7 +182,7 @@ seller.post("/seller/products/:id/soldout", async (c) => {
 });
 seller.post("/seller/products/:id/delete", async (c) => {
   await c.env.DB.prepare("UPDATE products SET active = 0 WHERE id = ? AND shop_id = ?").bind(c.req.param("id"), c.var.shop.id).run();
-  return c.redirect(back("/seller/products", "Product hata diya."));
+  return c.redirect(back("/seller/products", "Product removed."));
 });
 
 // AI draft from photo (limited, goes through AiProvider; stub unless configured)
@@ -194,11 +194,18 @@ seller.post("/seller/api/draft-from-photo", async (c) => {
   if (used >= limit) return c.json({ error: "Today's AI limit is used up. Try again tomorrow or contact Vedhin." }, 429);
   const form = await c.req.parseBody();
   const f = form.image;
-  if (!(f instanceof File) || f.size === 0 || f.size > 5 * 1024 * 1024 || !/^image\/(jpeg|png|webp)$/.test(f.type)) return c.json({ error: "Sahi photo chunein (5 MB tak)." }, 400);
+  if (!(f instanceof File) || f.size === 0 || f.size > 5 * 1024 * 1024 || !/^image\/(jpeg|png|webp)$/.test(f.type)) return c.json({ error: "Choose a JPG, PNG or WebP photo up to 5 MB." }, 400);
   const bytes = new Uint8Array(await f.arrayBuffer());
   let bin = "";
   for (const b of bytes) bin += String.fromCharCode(b);
-  const { draft, usage } = await getAiProvider(c.env).draftProductFromPhoto({ mime: f.type, base64: btoa(bin) });
+  let result;
+  try {
+    result = await getAiProvider(c.env).draftProductFromPhoto({ mime: f.type, base64: btoa(bin) });
+  } catch (e) {
+    console.error("draft-from-photo failed", (e as Error).message);
+    return c.json({ error: "The assistant could not read this photo right now. Please type the details." }, 502);
+  }
+  const { draft, usage } = result;
   await c.env.DB.prepare("INSERT INTO bot_usage (id, shop_id, day, ai_calls, input_tokens, output_tokens, est_cost_paise) VALUES (?,?,?,1,?,?,0)").bind(newId(), shop.id, day, usage.inputTokens, usage.outputTokens).run();
   return c.json({ draft });
 });
@@ -304,7 +311,7 @@ seller.post("/seller/orders/:id/tracking", async (c) => {
   const tid = String(form.tracking_id ?? "").trim().slice(0, 40);
   if (!/^[A-Za-z0-9\-\/ ]{4,40}$/.test(tid)) return c.redirect(back(`/seller/orders/${o.id}`, undefined, "Enter a valid tracking ID."));
   const courier = await c.env.DB.prepare("SELECT name, tracking_url_template FROM couriers WHERE id = ?").bind(String(form.courier ?? "other")).first<{ name: string; tracking_url_template: string }>();
-  if (!courier) return c.redirect(back(`/seller/orders/${o.id}`, undefined, "Courier chunein."));
+  if (!courier) return c.redirect(back(`/seller/orders/${o.id}`, undefined, "Choose a courier."));
   await c.env.DB.prepare("UPDATE orders SET status='dispatched', courier=?, tracking_id=?, tracking_url=?, dispatched_at=? WHERE id=? AND shop_id=?").bind(courier.name, tid, courier.tracking_url_template || null, new Date().toISOString(), o.id, shop.id).run();
   await event(c, o.id as string, shop.id, "dispatched", `${courier.name} ${tid}`);
   await whatsappText(c.env, "91" + (o.buyer_phone as string), `${shop.name}: your order #${o.number} has been dispatched. Courier: ${courier.name}, ID: ${tid}.`);
