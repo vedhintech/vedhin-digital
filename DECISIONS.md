@@ -38,3 +38,9 @@
 - Voice notes: new `AiProvider.transcribe` (Gemini free tier). Counted in the daily AI budget; only the seller's own voice is sent.
 - Fixed: WhatsApp media URLs live on `lookaside.fbsbx.com`; the old host check would have rejected real photos.
 - 09:30 IST morning summary email to live sellers (only when there is something to do).
+
+## 23 Nov: launch kit (M8 remainder)
+- Backup: admin-only JSON export (`/admin/backup.json`) of leads, consents, shops, products, orders, audit log. No tokens, secrets or bot state. Logged in the audit log.
+- Error alert: unhandled errors send one Telegram message per 10 minutes (route path with ids masked, no personal data). Needs `TELEGRAM_BOT_TOKEN`; silent without it.
+- Public `/pricing` page (Setup Rs 1999, support Rs 499/month, add-ons, plain-language terms from docs/08). The wording is a draft: have a CA or lawyer review before launch.
+- WhatsApp click-to-chat link via `WHATSAPP_BOT_NUMBER`.

@@ -91,7 +91,7 @@ function normCategory(s: string): string {
   return "ladies_dress";
 }
 const catLabel = (c: string | null | undefined) => (c === "jewellery" ? "Jewellery" : c === "ladies_dress" ? "Ladies dress" : c ?? "");
-const ACTION_LABEL: Record<string, string> = { lead_add: "Added a lead", lead_import: "Imported leads", lead_stage: "Changed lead stage", demo_built: "Built a demo website", consent: "Recorded call permission", whatsapp_outreach: "Sent WhatsApp preview link", login_link: "Created a seller login link", shop_update: "Updated a shop", shop_extend: "Extended a preview", shop_paid: "Marked a shop as paid" };
+const ACTION_LABEL: Record<string, string> = { lead_add: "Added a lead", lead_import: "Imported leads", lead_stage: "Changed lead stage", demo_built: "Built a demo website", consent: "Recorded call permission", whatsapp_outreach: "Sent WhatsApp preview link", login_link: "Created a seller login link", shop_update: "Updated a shop", shop_extend: "Extended a preview", shop_paid: "Marked a shop as paid", backup_download: "Downloaded a backup" };
 
 // ---------- overview ----------
 admin.get("/admin", async (c) => {
@@ -414,3 +414,22 @@ admin.get("/admin/audit", async (c) => {
 
 void raw;
 void esc;
+
+// ---------- backup ----------
+const BACKUP_TABLES: Record<string, string> = {
+  leads: "SELECT * FROM leads", consents: "SELECT * FROM consents", shops: "SELECT * FROM shops", products: "SELECT * FROM products",
+  product_images: "SELECT * FROM product_images", orders: "SELECT * FROM orders", order_items: "SELECT * FROM order_items",
+  order_events: "SELECT * FROM order_events", audit_log: "SELECT * FROM audit_log",
+};
+admin.get("/admin/backup", async (c) => {
+  const body = html`${pageHead("Backup", "A copy of your business data, saved on your own device.")}
+<div class="panel"><div class="panel-b"><p style="margin:0 0 6px">The file holds leads, call permissions, shops, products, orders and the audit log. It does not hold passwords, login links or secret keys.</p><p class="muted sm" style="margin:0 0 16px">It contains phone numbers and addresses. Keep it private and do not upload it anywhere public. Download one every week.</p><a class="btn" href="/admin/backup.json">${icon("backup", 16)}Download backup</a></div></div>`;
+  return c.html(page("Backup", "backup", body, fl(c)));
+});
+admin.get("/admin/backup.json", async (c) => {
+  const out: Record<string, unknown> = { exported_at: new Date().toISOString(), version: 1 };
+  for (const [name, sql] of Object.entries(BACKUP_TABLES)) out[name] = (await c.env.DB.prepare(sql + " LIMIT 50000").all()).results;
+  await audit(c.env, "backup_download", "json");
+  const day = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+  return new Response(JSON.stringify(out), { headers: { "content-type": "application/json; charset=utf-8", "content-disposition": `attachment; filename="vedhin-backup-${day}.json"`, "cache-control": "no-store" } });
+});
