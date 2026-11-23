@@ -44,3 +44,6 @@
 - Error alert: unhandled errors send one Telegram message per 10 minutes (route path with ids masked, no personal data). Needs `TELEGRAM_BOT_TOKEN`; silent without it.
 - Public `/pricing` page (Setup Rs 1999, support Rs 499/month, add-ons, plain-language terms from docs/08). The wording is a draft: have a CA or lawyer review before launch.
 - WhatsApp click-to-chat link via `WHATSAPP_BOT_NUMBER`.
+
+## 23 Nov: R2 enabled
+- Bucket `vedhin-media` created (free tier, 10 GB). `MEDIA` binding enabled in wrangler.toml. Photos are saved as uploaded (no WebP conversion; that needs paid Cloudflare Images).

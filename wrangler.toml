@@ -8,10 +8,10 @@ database_name = "vedhin-db"
 database_id = "adb99799-3d5a-446c-8f35-4d2323775844"
 migrations_dir = "migrations"
 
-# R2 (photos) is enabled later (M4). Uncomment after enabling R2 in the dashboard:
-# [[r2_buckets]]
-# binding = "MEDIA"
-# bucket_name = "vedhin-media"
+# R2 (seller photos). Bucket created 23 Nov.
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "vedhin-media"
 
 [triggers]
 crons = ["0 * * * *"]
