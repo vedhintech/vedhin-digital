@@ -16,6 +16,8 @@ export interface Env {
   WHATSAPP_VERIFY_TOKEN?: string;
   WHATSAPP_APP_SECRET?: string;
   WHATSAPP_TEMPLATE_OPENING?: string;
+  /** Bot's WhatsApp number, digits only with country code, e.g. 919876543210. Used for wa.me click-to-chat links. */
+  WHATSAPP_BOT_NUMBER?: string;
   RESEND_API_KEY?: string;
   MAIL_FROM?: string;
 }

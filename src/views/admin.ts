@@ -8,6 +8,7 @@ const ICONS: Record<string, string> = {
   outreach: '<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>',
   stats: '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>',
   bot: '<rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4"/><circle cx="12" cy="3" r="1"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/>',
+  backup: '<ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/>',
   audit: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/>',
   logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
@@ -144,7 +145,7 @@ details.more[open] summary{margin-bottom:14px}
 
 const NAV: [string, string, string][] = [
   ["overview", "Overview", "/admin"], ["leads", "Leads", "/admin/leads"], ["shops", "Shops", "/admin/shops"], ["outreach", "Outreach", "/admin/outreach"],
-  ["stats", "Performance", "/admin/stats"], ["bot", "Bot usage", "/admin/bot-usage"], ["audit", "Audit log", "/admin/audit"],
+  ["stats", "Performance", "/admin/stats"], ["bot", "Bot usage", "/admin/bot-usage"], ["audit", "Audit log", "/admin/audit"], ["backup", "Backup", "/admin/backup"],
 ];
 
 export function adminPage(title: string, active: string, body: Raw | string, flash?: { m?: string; e?: string }): string {

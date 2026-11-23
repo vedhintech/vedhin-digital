@@ -1,3 +1,4 @@
+import { botChatLink } from "../lib/wa";
 import { Hono, type MiddlewareHandler } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { z } from "zod";
@@ -90,7 +91,7 @@ function normCategory(s: string): string {
   return "ladies_dress";
 }
 const catLabel = (c: string | null | undefined) => (c === "jewellery" ? "Jewellery" : c === "ladies_dress" ? "Ladies dress" : c ?? "");
-const ACTION_LABEL: Record<string, string> = { lead_add: "Added a lead", lead_import: "Imported leads", lead_stage: "Changed lead stage", demo_built: "Built a demo website", consent: "Recorded call permission", whatsapp_outreach: "Sent WhatsApp preview link", login_link: "Created a seller login link", shop_update: "Updated a shop", shop_extend: "Extended a preview", shop_paid: "Marked a shop as paid" };
+const ACTION_LABEL: Record<string, string> = { lead_add: "Added a lead", lead_import: "Imported leads", lead_stage: "Changed lead stage", demo_built: "Built a demo website", consent: "Recorded call permission", whatsapp_outreach: "Sent WhatsApp preview link", login_link: "Created a seller login link", shop_update: "Updated a shop", shop_extend: "Extended a preview", shop_paid: "Marked a shop as paid", backup_download: "Downloaded a backup" };
 
 // ---------- overview ----------
 admin.get("/admin", async (c) => {
@@ -240,17 +241,19 @@ admin.get("/admin/leads/:id", async (c) => {
   const { results: chats } = l.shop_id ? await c.env.DB.prepare("SELECT at, direction, body FROM chat_messages WHERE shop_id = ? ORDER BY at DESC LIMIT 15").bind(l.shop_id).all<{ at: string; direction: string; body: string }>() : { results: [] as { at: string; direction: string; body: string }[] };
   const views = l.shop_id ? await one(c.env, "SELECT COUNT(*) n FROM preview_events WHERE shop_id = ? AND type = 'view'", l.shop_id) : 0;
   const hasConsent = consents.some((x) => !x.revoked_at);
+  const botLink = botChatLink(c.env, "Hi");
   const body = html`${pageHead(l.business_name, [l.area, catLabel(l.category), l.city].filter(Boolean).join("  |  "), html`${stageBadge(l.stage)}<span class="badge" style="--c:#E0661A">Score ${l.score}</span>${l.phone ? html`<a class="btn s" href="tel:${l.phone}">Call ${l.phone}</a>` : ""}`)}
 <p style="margin:-10px 0 18px"><a class="sm" href="/admin/leads">Back to leads</a></p>
 <div class="cols"><div class="stack">
 <div class="panel"><div class="panel-h"><h2>Shop details</h2></div><div class="panel-b"><dl class="dl">
 <dt>Owner</dt><dd>${l.owner_name ?? "-"}</dd><dt>Phone</dt><dd>${l.phone ?? "-"}</dd><dt>Rating</dt><dd>${l.rating ? `${l.rating} (${l.reviews ?? 0} reviews)` : "-"}</dd><dt>Address</dt><dd>${l.address ?? "-"}</dd>
 <dt>Links</dt><dd>${l.maps_url ? html`<a href="${l.maps_url}" rel="noopener" target="_blank">Google Maps</a>` : ""}${l.maps_url && l.instagram_url ? "  |  " : ""}${l.instagram_url ? html`<a href="${l.instagram_url}" rel="noopener" target="_blank">Instagram</a>` : ""}${!l.maps_url && !l.instagram_url ? "-" : ""}</dd></dl></div></div>
-<div class="panel"><div class="panel-h"><h2>Demo website</h2>${shop ? statusBadge(shop.status) : ""}</div><div class="panel-b">${shop ? html`<p style="margin:0 0 6px"><a href="/s/${shop.slug}" target="_blank" rel="noopener">${origin}/s/${shop.slug} ${icon("external", 14)}</a></p><p class="muted sm" style="margin:0">${views} preview view${views === 1 ? "" : "s"}${shop.expires_at ? ` | Ends ${fmtDate(shop.expires_at)}` : " | No expiry"}</p>` : html`<p class="muted" style="margin:0 0 14px">No demo website yet. Build one to share a live preview with this seller.</p><form method="post" action="/admin/leads/${l.id}/build-demo"><button class="btn">Build demo website</button></form>`}</div></div>
+<div class="panel"><div class="panel-h"><h2>Demo website</h2>${shop ? statusBadge(shop.status) : ""}</div><div class="panel-b">${shop ? html`<label class="sm muted" for="plink" style="display:block;margin-bottom:6px">Preview link (the same link the seller gets)</label><input id="plink" readonly value="${origin}/s/${shop.slug}" onclick="this.select()" style="width:100%;min-height:40px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:#FAFBFC;font:600 13px Inter,sans-serif"><div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 12px"><a class="btn sm" href="/s/${shop.slug}" target="_blank" rel="noopener">${icon("external", 14)}Open preview</a><button type="button" class="btn s sm" onclick="var i=document.getElementById('plink');navigator.clipboard.writeText(i.value).then(function(){this.textContent='Copied'}.bind(this),function(){i.select()})">Copy link</button></div><p class="muted sm" style="margin:0">${views} preview view${views === 1 ? "" : "s"}${shop.expires_at ? ` | Ends ${fmtDate(shop.expires_at)}` : " | No expiry"}</p>` : html`<p class="muted" style="margin:0 0 14px">No demo website yet. Build one to share a live preview with this seller.</p><form method="post" action="/admin/leads/${l.id}/build-demo"><button class="btn">Build demo website</button></form>`}</div></div>
 <div class="panel"><div class="panel-h"><h2>Seller chat</h2></div><div class="panel-b">${chats.length ? html`<div class="chat">${[...chats].reverse().map((m) => html`<div class="${m.direction === "in" ? "" : "out"}"><span class="muted sm">${fmt(m.at)} | ${m.direction === "in" ? "Seller" : "Bot"}</span><br>${m.body}</div>`)}</div>` : html`<p class="muted" style="margin:0">No messages yet.</p>`}</div></div>
 </div><div class="stack">
 <div class="panel"><div class="panel-h"><h2>1. Call permission</h2>${hasConsent ? html`<span class="badge" style="--c:#167C4A">Allowed</span>` : ""}</div><div class="panel-b"><form method="post" action="/admin/leads/${l.id}/consent"><div class="field"><label for="dec">Outcome of your call</label><select id="dec" name="decision"><option value="yes">Yes, WhatsApp is allowed</option><option value="no">No, not interested</option></select></div><div class="field"><label for="nt">What the seller said</label><input id="nt" name="note" maxlength="200"></div><button class="btn s">Save permission</button></form>
 ${consents.length ? html`<ul class="list" style="margin:14px -18px -18px;border-top:1px solid var(--line2)">${consents.map((x) => html`<li><div class="g"><b>${x.channel === "call" ? "Call" : x.channel}</b><span>${fmt(x.granted_at)}${x.note ? ` | ${x.note}` : ""}</span></div>${x.revoked_at ? html`<span class="badge" style="--c:#B42318">Revoked</span>` : ""}</li>`)}</ul>` : ""}</div></div>
+<div class="panel"><div class="panel-h"><h2>Bot chat link</h2></div><div class="panel-b">${botLink ? html`<p class="muted sm" style="margin:0 0 10px">Send this from your own WhatsApp. The seller taps it, sends "Hi", and the assistant replies. Free.</p><input id="blink" readonly value="${botLink}" onclick="this.select()" style="width:100%;min-height:40px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:#FAFBFC;font:600 13px Inter,sans-serif"><div style="margin-top:10px"><button type="button" class="btn s sm" onclick="var i=document.getElementById('blink');navigator.clipboard.writeText(i.value).then(function(){this.textContent='Copied'}.bind(this),function(){i.select()})">Copy link</button></div>` : html`<p class="muted sm" style="margin:0">Not set up yet. Add the <b>WHATSAPP_BOT_NUMBER</b> variable (digits with country code) to turn this on.</p>`}</div></div>
 <div class="panel"><div class="panel-h"><h2>2. Send preview link</h2></div><div class="panel-b"><p class="muted" style="margin:0 0 12px">Only after permission. Max ${outreachCap(c.env)} per day, with a STOP line.</p><form method="post" action="/admin/leads/${l.id}/send-whatsapp"><button class="btn" ${hasConsent && shop ? "" : "disabled"}>Send on WhatsApp</button></form>${hasConsent && shop ? "" : html`<p class="hint">${!hasConsent ? "Record call permission first." : "Build the demo website first."}</p>`}</div></div>
 <div class="panel"><div class="panel-h"><h2>3. Seller login link</h2></div><div class="panel-b"><p class="muted" style="margin:0 0 12px">Create a one-time link so the seller can open their portal.</p><form method="post" action="/admin/leads/${l.id}/login-link"><button class="btn s" ${shop && l.phone ? "" : "disabled"}>Create login link</button></form></div></div>
 <div class="panel"><div class="panel-h"><h2>Stage and notes</h2></div><div class="panel-b"><form method="post" action="/admin/leads/${l.id}/stage"><div class="inl"><div><label for="st">Stage</label><select id="st" name="stage">${STAGES.map((s) => html`<option value="${s}" ${l.stage === s ? "selected" : ""}>${STAGE_LABEL[s]}</option>`)}</select></div><button class="btn s">Update</button></div></form>
@@ -332,7 +335,7 @@ admin.get("/admin/shops", async (c) => {
   const body = html`${pageHead("Shops", `${results.length} shop${results.length === 1 ? "" : "s"}`)}
 <div class="panel">${results.length ? results.map((s) => html`<div class="shop"><div class="row" style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap"><div><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="font-size:16px">${s.name}</b>${statusBadge(s.status)}</div>
 <div class="muted sm" style="margin-top:4px">${planLabel[s.plan] ?? s.plan}  |  ${s.products} products  |  ${s.orders} orders  |  ${s.expires_at ? `Ends ${fmtDate(s.expires_at)}` : "No expiry"}</div></div>
-<div class="acts"><a class="btn s sm" href="/s/${s.slug}" target="_blank" rel="noopener">${icon("external", 14)}Open shop</a>${s.paid_at || s.status === "live" ? "" : html`<form method="post" action="/admin/shops/${s.id}/paid"><button class="btn ok sm">Mark as paid</button></form>`}</div></div>
+<div class="acts"><a class="btn s sm" href="/s/${s.slug}" target="_blank" rel="noopener">${icon("external", 14)}Open preview</a><button type="button" class="btn s sm" data-copy="/s/${s.slug}" onclick="navigator.clipboard.writeText(location.origin+this.dataset.copy).then(function(){this.textContent='Copied'}.bind(this))">Copy link</button>${s.paid_at || s.status === "live" ? "" : html`<form method="post" action="/admin/shops/${s.id}/paid"><button class="btn ok sm">Mark as paid</button></form>`}</div></div>
 <details class="more" style="margin-top:12px"><summary>${icon("arrow", 14)}Manage</summary>
 <form method="post" action="/admin/shops/${s.id}" class="inl"><div><label>Status</label><select name="status">${["preview", "live", "suspended", "expired"].map((x) => html`<option value="${x}" ${s.status === x ? "selected" : ""}>${x.charAt(0).toUpperCase() + x.slice(1)}</option>`)}</select></div>
 <div><label>Expiry date (empty = never)</label><input type="date" name="expires" value="${s.expires_at?.slice(0, 10) ?? ""}"></div>
@@ -411,3 +414,22 @@ admin.get("/admin/audit", async (c) => {
 
 void raw;
 void esc;
+
+// ---------- backup ----------
+const BACKUP_TABLES: Record<string, string> = {
+  leads: "SELECT * FROM leads", consents: "SELECT * FROM consents", shops: "SELECT * FROM shops", products: "SELECT * FROM products",
+  product_images: "SELECT * FROM product_images", orders: "SELECT * FROM orders", order_items: "SELECT * FROM order_items",
+  order_events: "SELECT * FROM order_events", audit_log: "SELECT * FROM audit_log",
+};
+admin.get("/admin/backup", async (c) => {
+  const body = html`${pageHead("Backup", "A copy of your business data, saved on your own device.")}
+<div class="panel"><div class="panel-b"><p style="margin:0 0 6px">The file holds leads, call permissions, shops, products, orders and the audit log. It does not hold passwords, login links or secret keys.</p><p class="muted sm" style="margin:0 0 16px">It contains phone numbers and addresses. Keep it private and do not upload it anywhere public. Download one every week.</p><a class="btn" href="/admin/backup.json">${icon("backup", 16)}Download backup</a></div></div>`;
+  return c.html(page("Backup", "backup", body, fl(c)));
+});
+admin.get("/admin/backup.json", async (c) => {
+  const out: Record<string, unknown> = { exported_at: new Date().toISOString(), version: 1 };
+  for (const [name, sql] of Object.entries(BACKUP_TABLES)) out[name] = (await c.env.DB.prepare(sql + " LIMIT 50000").all()).results;
+  await audit(c.env, "backup_download", "json");
+  const day = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+  return new Response(JSON.stringify(out), { headers: { "content-type": "application/json; charset=utf-8", "content-disposition": `attachment; filename="vedhin-backup-${day}.json"`, "cache-control": "no-store" } });
+});

@@ -28,6 +28,15 @@ export interface BotCatalog {
   noProduct: string;
   ordersSummary: (pay: number, pack: number, link: string) => string;
   ordersPreview: string;
+  orderList: (lines: string[], link: string) => string;
+  orderNone: string;
+  orderState: { pay: string; pack: string; ship: string };
+  orderNotFound: (n: number) => string;
+  orderConfirmed: (n: number) => string;
+  orderNeedPay: (n: number) => string;
+  orderDispatched: (n: number, courier: string, id: string) => string;
+  dispatchHelp: string;
+  typeIt: string;
   shopLink: (link: string) => string;
   plan: string;
   callNoted: string;
@@ -58,7 +67,16 @@ export const botEn: BotCatalog = {
   productAdded: (name, link) => `${name} is added! See it here: ${link}`,
   needPhoto: "Please send a photo, or write 'menu'.",
   noMedia: "The photo could not be downloaded. Please send it again.",
-  voiceNo: "I cannot understand voice notes yet. Please type your message.",
+  voiceNo: "I could not understand that voice note. Please type your message.",
+  orderList: (lines, link) => `Open orders:\n${lines.join("\n")}\n\nTo confirm a payment write: confirm 12\nTo dispatch write: dispatch 12 dtdc TRACKINGID\nPortal: ${link}`,
+  orderNone: "No open orders right now.",
+  orderState: { pay: "check payment", pack: "ready to pack", ship: "dispatched" },
+  orderNotFound: (n) => `I could not find order #${n}.`,
+  orderConfirmed: (n) => `Order #${n} is confirmed. The customer has been informed.`,
+  orderNeedPay: (n) => `Order #${n} cannot be dispatched yet. Confirm its payment first (write: confirm ${n}).`,
+  orderDispatched: (n, c, id) => `Order #${n} dispatched with ${c}, tracking ID ${id}. The customer can see it on the tracking page.`,
+  dispatchHelp: "To dispatch write: dispatch 12 dtdc TRACKINGID\nCouriers: dtdc, maruti, indiapost, delhivery, other",
+  typeIt: "Voice can mishear numbers. Please type this command.",
   priceSet: (name, price) => `${name} price set to ₹${price}.`,
   stockSet: (name, n) => `${name} stock set to ${n}.`,
   soldOut: (name) => `${name} marked as sold out.`,
@@ -94,7 +112,16 @@ export const botHinglish: BotCatalog = {
   productAdded: (name, link) => `${name} jud gaya! Dekhein: ${link}`,
   needPhoto: "Photo bhejein, ya 'menu' likhein.",
   noMedia: "Photo download nahi ho payi. Dobara bhejein.",
-  voiceNo: "Voice note abhi samajh nahi paate. Kripya likhkar bhejein.",
+  voiceNo: "Voice note samajh nahi aaya. Kripya likhkar bhejein.",
+  orderList: (lines, link) => `Open orders:\n${lines.join("\n")}\n\nPayment confirm karne ke liye likhein: confirm 12\nDispatch ke liye likhein: dispatch 12 dtdc TRACKINGID\nPortal: ${link}`,
+  orderNone: "Abhi koi open order nahi hai.",
+  orderState: { pay: "payment check karein", pack: "pack karna hai", ship: "dispatch ho gaya" },
+  orderNotFound: (n) => `Order #${n} nahi mila.`,
+  orderConfirmed: (n) => `Order #${n} confirm ho gaya. Customer ko bata diya gaya hai.`,
+  orderNeedPay: (n) => `Order #${n} abhi dispatch nahi ho sakta. Pehle payment confirm karein (likhein: confirm ${n}).`,
+  orderDispatched: (n, c, id) => `Order #${n} ${c} se dispatch ho gaya, tracking ID ${id}. Customer tracking page par dekh sakta hai.`,
+  dispatchHelp: "Dispatch ke liye likhein: dispatch 12 dtdc TRACKINGID\nCourier: dtdc, maruti, indiapost, delhivery, other",
+  typeIt: "Voice me number galat sunai de sakte hain. Kripya ye command likhkar bhejein.",
   priceSet: (name, price) => `${name} ka price ₹${price} kar diya.`,
   stockSet: (name, n) => `${name} ka stock ${n} kar diya.`,
   soldOut: (name) => `${name} sold out kar diya.`,
@@ -130,7 +157,16 @@ export const botHi: BotCatalog = {
   productAdded: (name, link) => `${name} जुड़ गया! यहाँ देखें: ${link}`,
   needPhoto: "फ़ोटो भेजें, या 'menu' लिखें।",
   noMedia: "फ़ोटो डाउनलोड नहीं हो पाई। दोबारा भेजें।",
-  voiceNo: "वॉइस नोट अभी समझ नहीं पाते। कृपया लिखकर भेजें।",
+  voiceNo: "वॉइस नोट समझ नहीं आया। कृपया लिखकर भेजें।",
+  orderList: (lines, link) => `खुले ऑर्डर:\n${lines.join("\n")}\n\nपेमेंट कन्फर्म करने के लिए लिखें: confirm 12\nडिस्पैच के लिए लिखें: dispatch 12 dtdc TRACKINGID\nपोर्टल: ${link}`,
+  orderNone: "अभी कोई खुला ऑर्डर नहीं है।",
+  orderState: { pay: "पेमेंट चेक करें", pack: "पैक करना है", ship: "डिस्पैच हो गया" },
+  orderNotFound: (n) => `ऑर्डर #${n} नहीं मिला।`,
+  orderConfirmed: (n) => `ऑर्डर #${n} कन्फर्म हो गया। ग्राहक को बता दिया गया है।`,
+  orderNeedPay: (n) => `ऑर्डर #${n} अभी डिस्पैच नहीं हो सकता। पहले पेमेंट कन्फर्म करें (लिखें: confirm ${n})।`,
+  orderDispatched: (n, c, id) => `ऑर्डर #${n} ${c} से डिस्पैच हो गया, ट्रैकिंग ID ${id}। ग्राहक ट्रैकिंग पेज पर देख सकता है।`,
+  dispatchHelp: "डिस्पैच के लिए लिखें: dispatch 12 dtdc TRACKINGID\nकूरियर: dtdc, maruti, indiapost, delhivery, other",
+  typeIt: "वॉइस में नंबर गलत सुनाई दे सकते हैं। कृपया ये कमांड लिखकर भेजें।",
   priceSet: (name, price) => `${name} का प्राइस ₹${price} कर दिया।`,
   stockSet: (name, n) => `${name} का स्टॉक ${n} कर दिया।`,
   soldOut: (name) => `${name} सोल्ड आउट कर दिया।`,

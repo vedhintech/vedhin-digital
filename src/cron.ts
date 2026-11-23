@@ -1,7 +1,7 @@
 import { newId } from "./lib/id";
 import type { Env } from "./types";
 import { computeScore, HOT_THRESHOLD, PRICE_RE, type Signals } from "./lib/scoring";
-import { telegram } from "./lib/notify";
+import { telegram, email } from "./lib/notify";
 
 const DAY = 86400_000;
 
@@ -87,10 +87,29 @@ export async function releaseStaleOrders(env: Env, now = new Date()): Promise<nu
   return n;
 }
 
+/** Morning summary email to each live seller (only when there is something to do). 09:30 IST. */
+export async function sellerSummaries(env: Env): Promise<number> {
+  const { results } = await env.DB.prepare("SELECT id, name, email FROM shops WHERE status = 'live' AND email IS NOT NULL AND email != ''").all<{ id: string; name: string; email: string }>();
+  let sent = 0;
+  for (const s of results) {
+    const q = async (sql: string) => ((await env.DB.prepare(sql).bind(s.id).first<{ n: number }>())?.n ?? 0);
+    const pay = await q("SELECT COUNT(*) n FROM orders WHERE shop_id = ? AND payment_status = 'proof_uploaded' AND status NOT IN ('cancelled','delivered')");
+    const pack = await q("SELECT COUNT(*) n FROM orders WHERE shop_id = ? AND status IN ('confirmed','packed')");
+    const low = await q("SELECT COUNT(*) n FROM products WHERE shop_id = ? AND active = 1 AND sold_out = 0 AND stock <= 2");
+    if (!pay && !pack && !low) continue;
+    const lines = [pay ? `${pay} payment${pay === 1 ? "" : "s"} to check` : "", pack ? `${pack} order${pack === 1 ? "" : "s"} to pack or dispatch` : "", low ? `${low} product${low === 1 ? "" : "s"} almost out of stock` : ""].filter(Boolean);
+    await email(env, s.email, `${s.name}: your morning summary`, `Good morning. Today:\n- ${lines.join("\n- ")}\n\nOpen your seller portal to take action.`);
+    sent++;
+  }
+  return sent;
+}
+
 export async function runScheduled(env: Env, now = new Date()): Promise<void> {
   await expirePreviews(env, now);
   await releaseStaleOrders(env, now);
   await scoreLeads(env, now);
+  // 09:30 IST = 04:00 UTC
+  if (now.getUTCHours() === 4) await sellerSummaries(env);
   // 21:00 IST = 15:30 UTC
   if (now.getUTCHours() === 15) await dailyDigest(env, now);
 }

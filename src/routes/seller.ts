@@ -1,3 +1,4 @@
+import { botChatLink } from "../lib/wa";
 import { Hono, type MiddlewareHandler } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { z } from "zod";
@@ -77,11 +78,13 @@ seller.get("/seller", async (c) => {
     q("SELECT COALESCE(SUM(total),0) n FROM orders WHERE shop_id = ? AND payment_status IN ('confirmed','cod') AND status != 'cancelled'", shop.id),
   ]);
   const link = `${new URL(c.req.url).origin}/s/${shop.slug}`;
+  const chatLink = botChatLink(c.env, "Hi");
   const body = html`<h1>Welcome</h1><p class="muted">${shop.status === "preview" ? "Your shop is in preview." : "Your shop is live."}</p>
 <div class="stats"><div class="card"><strong>${todayOrders}</strong>Orders today</div><div class="card"><strong>${payCheck}</strong>Check payment</div><div class="card"><strong>${toPack}</strong>To pack or dispatch</div><div class="card"><strong>${low}</strong>Low stock</div></div>
 <div class="card"><div class="muted">Confirmed sales so far</div><strong style="font-size:26px">${rupees(total)}</strong></div>
 <div class="card"><strong>Your shop link</strong><p style="word-break:break-all"><a href="${link}">${link}</a></p>
 <p><a class="btn s" href="https://wa.me/?text=${encodeURIComponent(`${shop.name}: ${link}`)}">Share on WhatsApp</a></p></div>
+${chatLink ? html`<div class="card"><strong>Chat with your assistant</strong><p class="muted">Send photos, change prices, check orders. Just type like you talk.</p><a class="btn ok big" href="${chatLink}" target="_blank" rel="noopener">Open WhatsApp chat</a></div>` : ""}
 <a class="btn big" href="/seller/products/new">Add a new product</a>`;
   return c.html(portal(shop, "home", "Home", body, flash(c)));
 });

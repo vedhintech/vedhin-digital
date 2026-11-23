@@ -133,7 +133,7 @@ describe("bot conversation", () => {
     expect(alerts.some((a) => a.includes("PRICE QUESTION"))).toBe(true);
   });
   it("voice notes get an honest reply; unknown text twice escalates", async () => {
-    expect((await say("9811111111", "", "audio"))[0]).toContain("voice notes");
+    expect((await say("9811111111", "", "audio"))[0]).toContain("voice note");
     await say("9811111111", "asdf qwer"); await say("9811111111", "zxcv");
     expect(alerts.some((a) => a.includes("STUCK"))).toBe(true);
   });

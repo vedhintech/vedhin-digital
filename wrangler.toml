@@ -18,7 +18,7 @@ crons = ["0 * * * *"]
 
 [vars]
 APP_ENV = "production"
-AI_PROVIDER = "stub"
+AI_PROVIDER = "gemini"
 
 # ---------------------------------------------------------------------------
 # Worker Previews (`npx wrangler preview`, used by Workers Builds for non-production branches / PRs).

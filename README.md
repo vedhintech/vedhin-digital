@@ -44,7 +44,7 @@ Panel: import leads, "Demo website banayein", call the seller, record permission
 
 ## Known limits (honest list)
 - Photos are stored as uploaded (type checked by real file bytes, max 5 MB). WebP conversion needs Cloudflare Images (paid), so it is skipped.
-- Bot cannot dispatch orders or read voice notes yet (orders go through the portal; voice needs a speech-to-text provider).
+- Voice notes are transcribed with Gemini (free tier, needs `AI_PROVIDER=gemini` and `GEMINI_API_KEY`). Order-changing commands (confirm, dispatch) must be typed, because voice can mishear numbers.
 - No QR image for UPI (UPI app link + UPI ID are shown; seller QR upload is a later add-on).
 - Razorpay/Cashfree auto-payment, live courier tracking API, comment-to-DM and the marketplace are Phase 2 (see `docs/01-PRD.md`).
 - Free-tier limits and WhatsApp/Gemini rates change: re-check before launch.
@@ -66,3 +66,6 @@ Workers Builds runs `npx wrangler preview` for non-production branches. That com
   Without them the preview admin login stays closed, which is safe.
 - When you add a migration, apply it to the preview database too: `npx wrangler d1 migrations apply vedhin-db-preview --remote`.
 - The production deploy command stays `npx wrangler deploy` (branch `main`).
+
+## WhatsApp click-to-chat
+Set the plain variable `WHATSAPP_BOT_NUMBER` (digits with country code, e.g. `919876543210`) in Cloudflare. The founder panel then shows a "Bot chat link" on each lead and the seller portal shows an "Open WhatsApp chat" button. The seller taps it, sends "Hi", and the free 24-hour reply window opens.

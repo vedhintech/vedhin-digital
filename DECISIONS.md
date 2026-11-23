@@ -32,3 +32,15 @@
 - PR builds run `npx wrangler preview` (Workers Builds non-production command), which requires a `previews` block. Added `[previews.vars]` (APP_ENV=preview, AI_PROVIDER=stub) and `[[previews.d1_databases]]` bound to a separate `vedhin-db-preview`. No crons, routes or secrets in previews.
 - `APP_ENV=preview` counts as deployed: secure cookies, mandatory 2-step admin login, HSTS, SESSION_SECRET required (`isDeployed` in `src/lib/secret.ts`).
 - A test guards that the preview DB id differs from the production DB id.
+
+## 2026-11-23: Chat orders, voice, morning summary
+- Seller can manage orders from WhatsApp with plain commands: `orders`, `confirm 12`, `dispatch 12 dtdc TRACKINGID`. Rules only, no AI cost. Confirm and dispatch are refused when the text came from a voice note.
+- Voice notes: new `AiProvider.transcribe` (Gemini free tier). Counted in the daily AI budget; only the seller's own voice is sent.
+- Fixed: WhatsApp media URLs live on `lookaside.fbsbx.com`; the old host check would have rejected real photos.
+- 09:30 IST morning summary email to live sellers (only when there is something to do).
+
+## 23 Nov: launch kit (M8 remainder)
+- Backup: admin-only JSON export (`/admin/backup.json`) of leads, consents, shops, products, orders, audit log. No tokens, secrets or bot state. Logged in the audit log.
+- Error alert: unhandled errors send one Telegram message per 10 minutes (route path with ids masked, no personal data). Needs `TELEGRAM_BOT_TOKEN`; silent without it.
+- Public `/pricing` page (Setup Rs 1999, support Rs 499/month, add-ons, plain-language terms from docs/08). The wording is a draft: have a CA or lawyer review before launch.
+- WhatsApp click-to-chat link via `WHATSAPP_BOT_NUMBER`.
