@@ -69,6 +69,20 @@ export function productForm(shop: Shop, p: Record<string, unknown> | null, attrs
 <div style="flex:1"><label for="mrp">MRP (₹, optional)</label><input id="mrp" name="mrp" type="number" inputmode="numeric" min="0" max="500000" value="${v("mrp")}"></div></div>
 <label for="stock">Stock quantity</label><input id="stock" name="stock" type="number" inputmode="numeric" min="0" max="9999" required value="${p ? v("stock") : 1}">
 <label for="image">Photo (camera or gallery)</label><input id="image" name="image" type="file" accept="image/*" capture="environment">
+<div class="card" style="margin:10px 0"><button type="button" id="ai-fill" class="btn s" style="width:100%">Fill name and details from photo</button><p class="muted" id="ai-msg" role="status" style="margin:8px 0 0">Take or choose a photo, then tap the button. Check the details before you save.</p></div>
+<script>(function(){var f=document.getElementById('image'),b=document.getElementById('ai-fill'),m=document.getElementById('ai-msg');if(!f||!b)return;
+function small(file){return new Promise(function(ok,no){var u=URL.createObjectURL(file),i=new Image();i.onload=function(){var s=Math.min(1,1280/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=Math.round(i.width*s);c.height=Math.round(i.height*s);c.getContext('2d').drawImage(i,0,0,c.width,c.height);URL.revokeObjectURL(u);c.toBlob(function(x){x?ok(x):no()},'image/jpeg',0.85)};i.onerror=no;i.src=u})}
+b.addEventListener('click',function(){var file=f.files&&f.files[0];if(!file){m.textContent='Choose a photo first.';return}
+b.disabled=true;m.textContent='Reading your photo...';
+small(file).then(function(blob){var fd=new FormData();fd.append('image',blob,'photo.jpg');return fetch('/seller/api/draft-from-photo',{method:'POST',body:fd,credentials:'same-origin'})})
+.then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j}})})
+.then(function(x){if(!x.ok){m.textContent=x.j.error||'Could not read the photo. Please type the details.';return}
+var d=x.j.draft||{},n=document.getElementById('name'),t=document.getElementById('description'),c=document.getElementById('category');
+if(n&&!n.value)n.value=d.name||'';if(t&&!t.value)t.value=d.description||'';
+if(c&&d.category){for(var k=0;k<c.options.length;k++){if(c.options[k].text.toLowerCase()===String(d.category).toLowerCase()){c.selectedIndex=k;break}}}
+m.textContent='Done. Please check the name and details, then set the price.'})
+.catch(function(){m.textContent='Could not read the photo. Please type the details.'})
+.then(function(){b.disabled=false})})})();</script>
 <label for="image_url">Or a photo link (optional)</label><input id="image_url" name="image_url" type="url" placeholder="https://...">
 <h2>Details</h2>
 ${fields.map((f) => (f.type === "bool" ? html`<div class="cb"><input type="checkbox" id="a_${f.key}" name="a_${f.key}" ${attrs[f.key] === true ? "checked" : ""}><label for="a_${f.key}">${f.label}</label></div>` : html`<label for="a_${f.key}">${f.label}</label><input id="a_${f.key}" name="a_${f.key}" maxlength="80" value="${(attrs[f.key] as string) ?? ""}">`))}`;
